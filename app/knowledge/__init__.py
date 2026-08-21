@@ -1,0 +1,1 @@
+"""MycoGuard knowledge package."""
