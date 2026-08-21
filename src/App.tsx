@@ -1,0 +1,212 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackendHealth, MushroomTraits, RiskAssessment, VisionResult } from './types';
+import { computeRiskAssessment } from './engine/mushroomEngine';
+import { evaluateVision, mergeTraits } from './engine/merge';
+import { probeHealth, analyzePhoto, OfflineError, ApiError } from './services/backend';
+import { MushroomCanvas } from './components/MushroomCanvas';
+import { TraitPanel } from './components/TraitPanel';
+import { PhotoCapture, PreparedPhoto } from './components/PhotoCapture';
+import { ResultPanel } from './components/ResultPanel';
+import { ChatPanel } from './components/ChatPanel';
+import { StatusBadge } from './components/StatusBadge';
+import { DisclaimerBanner } from './components/disclaimer';
+import { Camera, ListChecks, Spinner } from './components/icons';
+
+type Tab = 'manual' | 'photo';
+
+const App: React.FC = () => {
+  const [traits, setTraits] = useState<MushroomTraits>({});
+  const [vision, setVision] = useState<VisionResult | null>(null);
+  const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
+  const [health, setHealth] = useState<BackendHealth | null | undefined>(undefined);
+  const [tab, setTab] = useState<Tab>('manual');
+  const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void probeHealth().then((h) => {
+      if (!cancelled) setHealth(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filledCount = useMemo(() => Object.values(traits).filter((v) => v).length, [traits]);
+
+  const handleTraitChange = useCallback((id: keyof MushroomTraits, value: string) => {
+    setTraits((prev) => {
+      const next = { ...prev };
+      if (value) next[id] = value;
+      else delete next[id];
+      return next;
+    });
+    setAssessment(null);
+  }, []);
+
+  const runManual = useCallback(() => {
+    setAssessment(computeRiskAssessment(traits));
+  }, [traits]);
+
+  const runPhoto = useCallback(async () => {
+    if (!photo) return;
+    setAnalyzing(true);
+    setPhotoError(null);
+    try {
+      const v = await analyzePhoto(photo.blob, photo.fileName);
+      setVision(v);
+      // Vision fills observation gaps; manual observations win on conflict.
+      setTraits((prev) => mergeTraits(prev, v.traits));
+      setAssessment(evaluateVision(traits, v));
+    } catch (err) {
+      if (err instanceof OfflineError) {
+        setPhotoError('后端视觉服务未配置或不可用——已回退纯离线模式，请改用性状鉴定。');
+      } else if (err instanceof ApiError) {
+        setPhotoError(`视觉分析失败：${err.message}`);
+      } else {
+        setPhotoError('视觉分析失败，请重试。');
+      }
+      setAssessment(null);
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [photo, traits]);
+
+  const clearPhoto = useCallback(() => {
+    setPhoto(null);
+    setVision(null);
+    setPhotoError(null);
+    setAssessment(null);
+  }, []);
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <div className="brand">
+          <div className="brand-logo">🍄</div>
+          <div>
+            <h1>MycoGuard</h1>
+            <p className="tagline">蘑菇安全识别助手 · 不确定性量化的风险分级</p>
+          </div>
+        </div>
+        <div className="header-right">
+          <StatusBadge health={health} />
+        </div>
+      </header>
+
+      <div className="app-main">
+        {/* ---- Input panel ---- */}
+        <aside className="panel input-panel">
+          <div className="mode-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'manual'}
+              className={`mode-tab${tab === 'manual' ? ' active' : ''}`}
+              onClick={() => setTab('manual')}
+            >
+              <ListChecks size={15} /> 性状鉴定
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'photo'}
+              className={`mode-tab${tab === 'photo' ? ' active' : ''}`}
+              onClick={() => setTab('photo')}
+            >
+              <Camera size={15} /> 拍照识别
+            </button>
+          </div>
+
+          {tab === 'manual' ? (
+            <TraitPanel traits={traits} disabled={analyzing} onChange={handleTraitChange} />
+          ) : (
+            <PhotoCapture photo={photo} disabled={analyzing} onPhoto={setPhoto} onClear={clearPhoto} />
+          )}
+
+          <div style={{ padding: '0 16px 16px' }}>
+            {tab === 'manual' ? (
+              <button type="button" className="btn primary block" disabled={filledCount < 1 || analyzing} onClick={runManual}>
+                {analyzing ? <Spinner size={15} /> : '🍄 开始分析'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn primary block"
+                disabled={!photo || analyzing}
+                onClick={() => void runPhoto()}
+              >
+                {analyzing ? (
+                  <>
+                    <Spinner size={15} /> 视觉分析中…
+                  </>
+                ) : (
+                  '📷 拍照识别'
+                )}
+              </button>
+            )}
+            {photoError && <div className="form-error">{photoError}</div>}
+            {filledCount < 3 && tab === 'manual' && (
+              <div className="form-note" style={{ marginTop: 10 }}>
+                至少录入 <strong>3 项</strong> 判别性性状才能给出方向性风险判断；不足时结果将强制为「无法判断」。
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* ---- Stage: canvas + result ---- */}
+        <main className="panel stage">
+          <div className="canvas-area">
+            <div className="canvas-shell">
+              <MushroomCanvas traits={traits} />
+            </div>
+          </div>
+
+          {assessment ? (
+            <ResultPanel assessment={assessment} vision={vision} filledTraits={filledCount} />
+          ) : (
+            <div className="empty-state">
+              <div className="es-icon">🍄</div>
+              <div className="es-title">等待观察数据</div>
+              <div className="es-sub">
+                {tab === 'manual'
+                  ? '在左侧选择你观察到的蘑菇性状，SVG 形态会实时更新；点击「开始分析」获得不确定性量化的风险分级。'
+                  : '上传蘑菇照片后点击「拍照识别」。识别失败或后端离线时，自动回退为纯离线规则引擎模式。'}
+                <br />
+                任何结果都仅供教育参考，不构成食用建议。
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* ---- Chat ---- */}
+        <aside className="panel chat-panel">
+          <div className="panel-head">
+            <span>安全知识问答</span>
+            <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
+              {health?.chat ? 'AI 增强' : '知识库规则'}
+            </span>
+          </div>
+          <ChatPanel chatEnabled={Boolean(health?.chat)} />
+        </aside>
+      </div>
+
+      <footer className="app-footer">
+        <DisclaimerBanner />
+        <div className="footer-tech">
+          <span>
+            <span className="pulse-dot" />
+            离线规则引擎（随机森林逻辑蒸馏 · UCI Mushrooms）
+          </span>
+          <span>风险分级：低 / 中 / 高 / 无法判断</span>
+          <span>置信度区间 ∈ (0, 97%]</span>
+          <span>视觉增强：qwen-vl-plus（可选后端）</span>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
