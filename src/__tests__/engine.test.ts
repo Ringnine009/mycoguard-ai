@@ -13,6 +13,41 @@ import { MushroomTraits } from '../types';
  *     "unknown" (无法判断), even when a dangerous signal was observed.
  */
 
+describe('computeRiskAssessment — data-grounded rules (UCI distillation v2)', () => {
+  // Weights recalibrated from scripts/analyze_dataset.py on the real 8,124-row
+  // dataset: purity branches + Gini importances. gill-color and ring-type were
+  // previously unscored despite being top-3/top-5 traits — now covered.
+
+  it('buff (浅黄) gill color → high risk (dataset: 100% poisonous, n=1728)', () => {
+    const r = computeRiskAssessment({ gillColor: 'b', capShape: 'x', capColor: 'n' });
+    expect(r.riskLevel).toBe('high');
+    expect(r.ruleHits.some((h) => h.id === 'gill-color-buff')).toBe(true);
+  });
+
+  it('large pendant ring → high risk (dataset: 100% poisonous, n=1296)', () => {
+    const r = computeRiskAssessment({ ringType: 'l', capShape: 'x', capColor: 'n' });
+    expect(r.riskLevel).toBe('high');
+    expect(r.ruleHits.some((h) => h.id === 'ring-large')).toBe(true);
+  });
+
+  it('abundant population → low risk (dataset: 100% edible, n=384)', () => {
+    const r = computeRiskAssessment({ population: 'a', capShape: 'x', capColor: 'n' });
+    expect(r.riskLevel).toBe('low');
+    expect(r.ruleHits.some((h) => h.id === 'population-anchor')).toBe(true);
+  });
+
+  it('buff gills + almond odor → mixed medium', () => {
+    const r = computeRiskAssessment({ gillColor: 'b', odor: 'a', capShape: 'x' });
+    expect(r.riskLevel).toBe('medium');
+  });
+
+  it('spore green + buff gills + narrow gills → strongly high', () => {
+    const r = computeRiskAssessment({ sporePrintColor: 'r', gillColor: 'b', gillSize: 'n' });
+    expect(r.riskLevel).toBe('high');
+    expect(r.confidence.point).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
 describe('computeRiskAssessment — insufficient input forces "unknown"', () => {
   it('returns unknown + incomplete when fewer than 3 traits are provided', () => {
     const r = computeRiskAssessment({ odor: 'f' });

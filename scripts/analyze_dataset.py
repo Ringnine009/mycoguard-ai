@@ -51,9 +51,28 @@ NA_VALUES = ["?"]
 def load_data(path: Path) -> pd.DataFrame:
     if path.suffix == ".data":
         df = pd.read_csv(path, header=None, names=COLUMNS, na_values=NA_VALUES)
-        df["stalk-root"] = df["stalk-root"].fillna("?")
-        return df
-    return pd.read_csv(path, na_values=NA_VALUES)
+    else:
+        df = pd.read_csv(path, na_values=NA_VALUES)
+
+    # Schema variants seen in the wild:
+    #  - ".data"  files: class column named "class", values p/e
+    #  - ".csv"   header variants: first column named "poisonous", values 1/0
+    #    (or "class" with p/e). Normalize everything to class ∈ {p, e}.
+    if "poisonous" in df.columns:
+        df = df.rename(columns={"poisonous": "class"})
+        df["class"] = df["class"].map({1: "p", 0: "e"})
+    if "class" not in df.columns:
+        raise ValueError(
+            "unrecognized schema: expected a 'class' (or 'poisonous') column, "
+            f"got {list(df.columns)[:5]}..."
+        )
+    df["class"] = df["class"].astype(str).str.strip().str.lower()
+    df["class"] = df["class"].map({"edible": "e", "poisonous": "p", "e": "e", "p": "p"})
+
+    # UCI marks stalk-root '?' as missing, but in this dataset it is a real
+    # category that carries signal (the original course analysis used it).
+    df["stalk-root"] = df["stalk-root"].fillna("?")
+    return df
 
 
 def main() -> int:

@@ -56,6 +56,13 @@ export interface RuleHit {
   detail: string;
 }
 
+/**
+ * Dual-channel consistency between the offline rule engine and the vision
+ * model: agree / partial / disagree by confidence gap, or n-a when the
+ * vision channel provided nothing usable.
+ */
+export type VisionConsistency = 'agree' | 'partial' | 'disagree' | 'n-a';
+
 export interface RiskAssessment {
   riskLevel: RiskLevel;
   confidence: ConfidenceInterval;
@@ -64,6 +71,8 @@ export interface RiskAssessment {
   ruleHits: RuleHit[];
   /** True when input was insufficient and the engine was forced to "unknown". */
   incomplete: boolean;
+  /** Set only when a photo was analyzed (see engine/merge.ts fusion). */
+  visionConsistency?: VisionConsistency;
 }
 
 /** Result of the optional vision-based analysis (proxied by the backend). */

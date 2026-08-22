@@ -1,0 +1,50 @@
+{
+  "dataset": "UCI Mushrooms (agaricus-lepiota)",
+  "samples": 8124,
+  "held_out_accuracy": 1.0,
+  "feature_importance_top5": {
+    "odor": 0.16144232837615446,
+    "gill-color": 0.1119471308040062,
+    "gill-size": 0.11096441488128117,
+    "spore-print-color": 0.09300409378013569,
+    "ring-type": 0.0701593529155531
+  },
+  "purity_rules": {
+    "odor": {
+      "a": "edible",
+      "c": "poisonous",
+      "f": "poisonous",
+      "l": "edible",
+      "m": "poisonous",
+      "p": "poisonous",
+      "s": "poisonous",
+      "y": "poisonous"
+    },
+    "spore-print-color": {
+      "b": "edible",
+      "o": "edible",
+      "r": "poisonous",
+      "u": "edible",
+      "y": "edible"
+    },
+    "gill-size": {},
+    "stalk-root": {
+      "r": "edible"
+    }
+  },
+  "engine_weights": {
+    "odor_foul": 6.0,
+    "spore_green": 5.5,
+    "gill_narrow": 3.5,
+    "stalk_root_missing": 2.5,
+    "bruises_no": 2.0,
+    "habitat_path_urban": 1.0,
+    "population_several": 1.5,
+    "gill_close": 1.5,
+    "odor_anchor": 3.5,
+    "stalk_root_tapered": 3.5,
+    "gill_wide": 2.5,
+    "bruises_yes": 2.0,
+    "gill_broad": 1.0
+  }
+}

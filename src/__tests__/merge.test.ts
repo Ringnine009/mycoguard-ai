@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mergeTraits, evaluateVision } from '../engine/merge';
+import { computeRiskAssessment } from '../engine/mushroomEngine';
 import { VisionResult } from '../types';
 
 const vision = (overrides: Partial<VisionResult>): VisionResult => ({
@@ -55,5 +56,60 @@ describe('evaluateVision — photo identification flows through the shared engin
     const r = evaluateVision({}, undefined);
     expect(r.riskLevel).toBe('unknown');
     expect(r.incomplete).toBe(true);
+  });
+});
+
+describe('fuseVisionConfidence — dual-channel confidence fusion', () => {
+  // modelConfidence is interpreted as "visual channel reliability": a
+  // confident visual read raises/narrows the engine interval when it agrees,
+  // and widens it when it disagrees. See merge.ts for the full formula.
+
+  it('no vision → interval and consistency untouched', () => {
+    const manual = { odor: 'a', capShape: 'x', capColor: 'n' };
+    const r = evaluateVision(manual, undefined);
+    expect(r.visionConsistency).toBeUndefined();
+    expect(r.confidence).toEqual(computeRiskAssessment(manual).confidence);
+  });
+
+  it('modelConfidence 0 (nothing seen) → engine interval kept, consistency n-a', () => {
+    const r = evaluateVision({ odor: 'a', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0 }));
+    expect(r.visionConsistency).toBe('n-a');
+    expect(r.confidence).toEqual(computeRiskAssessment({ odor: 'a', capShape: 'x', capColor: 'n' }).confidence);
+  });
+
+  it('agreeing confident vision narrows the interval and raises the point', () => {
+    const base = computeRiskAssessment({ odor: 'f', capShape: 'x', capColor: 'n' });
+    const r = evaluateVision({ odor: 'f', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.85 }));
+    expect(r.visionConsistency).toBe('agree');
+    expect(r.confidence.point).toBeGreaterThan(base.confidence.point);
+    expect(r.confidence.upper - r.confidence.lower).toBeLessThan(base.confidence.upper - base.confidence.lower);
+    expect(r.confidence.upper).toBeLessThanOrEqual(0.97);
+  });
+
+  it('disagreeing confident vision widens the interval', () => {
+    const base = computeRiskAssessment({ odor: 'a', capShape: 'x', capColor: 'n' });
+    const r = evaluateVision({ odor: 'a', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.95 }));
+    expect(r.visionConsistency).toBe('disagree');
+    expect(r.confidence.upper - r.confidence.lower).toBeGreaterThan(base.confidence.upper - base.confidence.lower);
+  });
+
+  it('partial agreement maps to partial consistency', () => {
+    // base point for {odor a, capShape x, capColor n} ≈ 0.537; mc 0.35 → Δ≈0.19 (partial band)
+    const r = evaluateVision({ odor: 'a', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.35 }));
+    expect(r.visionConsistency).toBe('partial');
+  });
+
+  it('confident model cannot rescue an unknown (insufficient) verdict → partial', () => {
+    const r = evaluateVision({}, vision({ modelConfidence: 0.9, traits: { capColor: 'r' } }));
+    expect(r.riskLevel).toBe('unknown');
+    expect(r.visionConsistency).toBe('partial');
+  });
+
+  it('fused interval is always well-formed and never claims certainty', () => {
+    const manual = { odor: 'a', capShape: 'x', capColor: 'n' };
+    const r = evaluateVision(manual, vision({ modelConfidence: 0.9 }));
+    expect(r.confidence.lower).toBeLessThanOrEqual(r.confidence.point);
+    expect(r.confidence.point).toBeLessThanOrEqual(r.confidence.upper);
+    expect(r.confidence.upper).toBeLessThanOrEqual(0.97);
   });
 });
