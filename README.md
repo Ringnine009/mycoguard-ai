@@ -49,10 +49,21 @@ something you could actually put on GitHub.
 | Uncertainty grading | engine | low / medium / high / **unknown** (forced when input < 3 traits) |
 | Confidence **interval** | engine + UI | `(0, 0.97]`, never 100% |
 | Photo identification | `app/` FastAPI → qwen-vl-plus | base64 proxied; keys never in the browser |
-| Offline-first degradation | `src/services/backend.ts` + `/api/health` | full UI works with no backend |
+| Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
 | Tests | vitest (89) + pytest (40) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
+
+---
+
+## Screenshots
+
+![Manual trait mode with live SVG renderer](docs/screenshots/screenshot-1-landing.png)
+![High-risk result: confidence interval, rule hits, offline expert narrative, disclaimer](docs/screenshots/screenshot-2-high-risk-result.png)
+![Photo identification mode](docs/screenshots/screenshot-3-photo-mode.png)
+
+Regenerate with `node scripts/capture_screenshots.mjs` (needs the backend
+running and `npm i -D playwright`; uses your installed Edge/Chrome).
 
 ---
 
@@ -76,9 +87,11 @@ something you could actually put on GitHub.
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Offline-first**: the rule engine, SVG renderer, trait selectors, knowledge
-chat (rule mode) and the entire UI work with **zero backend**. The backend
-only adds photo identification and LLM fluency.
+**Offline-first**: the rule engine, SVG renderer, trait selectors, and the
+entire analysis UI work with **zero backend** — a fully static page. The
+backend only adds photo identification and the safety-knowledge chat; the
+chat's "rule mode" (backend running **without** a `DEEPSEEK_API_KEY`) answers
+directly from the built-in knowledge base without any LLM call.
 
 ---
 
@@ -94,13 +107,18 @@ npm run dev          # http://localhost:5173
 Use the **性状鉴定 (manual traits)** tab. Pick ≥ 3 traits and click
 **开始分析**. The status badge shows *纯离线模式 · 规则引擎*.
 
+> Note: manual trait analysis and the SVG renderer work fully offline.
+> The **knowledge chat needs the FastAPI backend** (it calls `/api/chat`);
+> with the backend down it shows a friendly error. Photo identification needs
+> the backend too (see step 2).
+
 ### 2. Full stack (photo identification + AI chat)
 
 ```bash
 # Backend
 python -m venv .venv
 .venv\Scripts\activate           # Windows  (Linux/macOS: source .venv/bin/activate)
-pip install -r app/requirements.txt
+pip install -r requirements.txt  # full toolchain (backend + analysis + tests)
 # provide keys via env vars or the parent projects/.env (never committed):
 #   DASHSCOPE_API_KEY, DEEPSEEK_API_KEY
 .venv\Scripts\python -m uvicorn app.main:app --port 8000
