@@ -109,13 +109,17 @@ def main() -> int:
     print(f"[model] random-forest held-out accuracy: {acc * 100:.2f}% (test set, n={len(X_test)})")
 
     imp = pd.Series(rf.feature_importances_, index=X.columns).sort_values(ascending=False)
-    print("\n[importance] top-10 traits by Gini importance:")
-    print(imp.head(10).to_string())
+    print("\n[importance] all traits by Gini importance:")
+    print(imp.to_string())
 
-    # Purity scan: values that map to a single class in the FULL dataset.
-    print("\n[purity] 100%-purity decision branches (full dataset):")
+    # Purity scan over ALL 22 traits: values that map to a single class in the
+    # FULL dataset. This is the evidence behind every engine rule that cites a
+    # "100% ... (n=...)" support count.
+    print("\n[purity] 100%-purity decision branches (all traits, full dataset):")
     distilled: dict[str, dict[str, str]] = {}
-    for feat in ["odor", "spore-print-color", "gill-size", "stalk-root"]:
+    for feat in df.columns:
+        if feat == "class":
+            continue
         distilled[feat] = {}
         for val, subset in df.groupby(feat, dropna=False):
             counts = subset["class"].value_counts()
@@ -129,19 +133,45 @@ def main() -> int:
         "dataset": "UCI Mushrooms (agaricus-lepiota)",
         "samples": len(df),
         "held_out_accuracy": float(acc),
-        "feature_importance_top5": imp.head(5).to_dict(),
+        "feature_importance": imp.to_dict(),
         "purity_rules": distilled,
+        # ENGINE_WEIGHTS mirrors src/engine/mushroomEngine.ts (ENGINE_RULES).
+        # Consistency is enforced by src/__tests__/distilled.test.ts.
         "engine_weights": {
-            "odor_foul": 6.0, "spore_green": 5.5, "gill_narrow": 3.5,
-            "stalk_root_missing": 2.5, "bruises_no": 2.0, "habitat_path_urban": 1.0,
-            "population_several": 1.5, "gill_close": 1.5,
-            "odor_anchor": 3.5, "stalk_root_tapered": 3.5, "gill_wide": 2.5,
-            "bruises_yes": 2.0, "gill_broad": 1.0,
+            "odor-foul": {"trait": "odor", "values": ["f", "p", "c", "y", "s", "m"], "side": "p", "severity": "critical", "weight": 6.0},
+            "spore-green": {"trait": "sporePrintColor", "values": ["r"], "side": "p", "severity": "critical", "weight": 5.5},
+            "gill-color-buff": {"trait": "gillColor", "values": ["b"], "side": "p", "severity": "warning", "weight": 4.0},
+            "gill-color-green": {"trait": "gillColor", "values": ["r"], "side": "p", "severity": "warning", "weight": 2.0},
+            "ring-large": {"trait": "ringType", "values": ["l"], "side": "p", "severity": "warning", "weight": 4.0},
+            "ring-type-none": {"trait": "ringType", "values": ["n"], "side": "p", "severity": "warning", "weight": 2.0},
+            "ring-number-none": {"trait": "ringNumber", "values": ["n"], "side": "p", "severity": "warning", "weight": 2.0},
+            "gill-narrow": {"trait": "gillSize", "values": ["n"], "side": "p", "severity": "warning", "weight": 3.5},
+            "gill-close": {"trait": "gillSpacing", "values": ["c"], "side": "p", "severity": "warning", "weight": 1.5},
+            "root-missing": {"trait": "stalkRoot", "values": ["?"], "side": "p", "severity": "warning", "weight": 2.5},
+            "bruises-no": {"trait": "bruises", "values": ["f"], "side": "p", "severity": "warning", "weight": 2.0},
+            "habitat-path": {"trait": "habitat", "values": ["p"], "side": "p", "severity": "warning", "weight": 1.5},
+            "habitat-urban": {"trait": "habitat", "values": ["u"], "side": "p", "severity": "warning", "weight": 1.0},
+            "population-several": {"trait": "population", "values": ["v"], "side": "p", "severity": "warning", "weight": 1.5},
+            "cap-umbonate": {"trait": "capShape", "values": ["k"], "side": "p", "severity": "warning", "weight": 1.5},
+            "stalk-above-buff": {"trait": "stalkColorAbove", "values": ["b"], "side": "p", "severity": "warning", "weight": 1.5},
+            "odor-safety-anchor": {"trait": "odor", "values": ["a", "l"], "side": "e", "severity": "info", "weight": 3.5},
+            "gill-color-anchor": {"trait": "gillColor", "values": ["e", "o"], "side": "e", "severity": "info", "weight": 2.0},
+            "ring-flaring": {"trait": "ringType", "values": ["f"], "side": "e", "severity": "info", "weight": 1.5},
+            "gill-broad": {"trait": "gillSize", "values": ["b"], "side": "e", "severity": "info", "weight": 1.0},
+            "gill-wide": {"trait": "gillSpacing", "values": ["w"], "side": "e", "severity": "info", "weight": 2.5},
+            "root-tapered": {"trait": "stalkRoot", "values": ["r"], "side": "e", "severity": "info", "weight": 3.5},
+            "root-club": {"trait": "stalkRoot", "values": ["c"], "side": "e", "severity": "info", "weight": 1.5},
+            "bruises-yes": {"trait": "bruises", "values": ["t"], "side": "e", "severity": "info", "weight": 2.0},
+            "habitat-waste": {"trait": "habitat", "values": ["w"], "side": "e", "severity": "info", "weight": 1.5},
+            "population-anchor": {"trait": "population", "values": ["a", "n"], "side": "e", "severity": "info", "weight": 3.0},
+            "cap-sunken": {"trait": "capShape", "values": ["s"], "side": "e", "severity": "info", "weight": 1.0},
         },
     }
     with open("distilled_rules.json", "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, indent=2)
-    print("\n[out] distilled_rules.json written (weights mirrored in src/engine/mushroomEngine.ts)")
+    print(f"\n[out] distilled_rules.json written ({len(out['engine_weights'])} engine rules, "
+          f"{sum(len(v) for v in distilled.values())} purity branches over {len(distilled)} traits); "
+          "mirrors src/engine/mushroomEngine.ts ENGINE_RULES (cross-checked by vitest)")
     return 0
 
 

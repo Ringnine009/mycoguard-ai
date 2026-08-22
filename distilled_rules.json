@@ -2,14 +2,43 @@
   "dataset": "UCI Mushrooms (agaricus-lepiota)",
   "samples": 8124,
   "held_out_accuracy": 1.0,
-  "feature_importance_top5": {
+  "feature_importance": {
     "odor": 0.16144232837615446,
     "gill-color": 0.1119471308040062,
     "gill-size": 0.11096441488128117,
     "spore-print-color": 0.09300409378013569,
-    "ring-type": 0.0701593529155531
+    "ring-type": 0.0701593529155531,
+    "population": 0.06385082508550824,
+    "stalk-root": 0.060484115117956844,
+    "bruises": 0.05242410146127714,
+    "stalk-surface-above-ring": 0.04982051332317173,
+    "stalk-surface-below-ring": 0.04540661974943389,
+    "gill-spacing": 0.042847845189322754,
+    "habitat": 0.03187219376984776,
+    "stalk-shape": 0.020828752024861133,
+    "cap-color": 0.016562388052492927,
+    "stalk-color-below-ring": 0.01654414810860074,
+    "stalk-color-above-ring": 0.0160952186279678,
+    "ring-number": 0.016000405632743013,
+    "cap-surface": 0.009521856143532568,
+    "cap-shape": 0.004491833241657767,
+    "veil-color": 0.0028796136744999304,
+    "gill-attachment": 0.0028522500399951107,
+    "veil-type": 0.0
   },
   "purity_rules": {
+    "cap-shape": {
+      "c": "poisonous",
+      "s": "edible"
+    },
+    "cap-surface": {
+      "g": "poisonous"
+    },
+    "cap-color": {
+      "r": "edible",
+      "u": "edible"
+    },
+    "bruises": {},
     "odor": {
       "a": "edible",
       "c": "poisonous",
@@ -20,6 +49,51 @@
       "s": "poisonous",
       "y": "poisonous"
     },
+    "gill-attachment": {},
+    "gill-spacing": {},
+    "gill-size": {},
+    "gill-color": {
+      "b": "poisonous",
+      "e": "edible",
+      "o": "edible",
+      "r": "poisonous"
+    },
+    "stalk-shape": {},
+    "stalk-root": {
+      "r": "edible"
+    },
+    "stalk-surface-above-ring": {},
+    "stalk-surface-below-ring": {},
+    "stalk-color-above-ring": {
+      "b": "poisonous",
+      "c": "poisonous",
+      "e": "edible",
+      "g": "edible",
+      "o": "edible",
+      "y": "poisonous"
+    },
+    "stalk-color-below-ring": {
+      "b": "poisonous",
+      "c": "poisonous",
+      "e": "edible",
+      "g": "edible",
+      "o": "edible",
+      "y": "poisonous"
+    },
+    "veil-type": {},
+    "veil-color": {
+      "n": "edible",
+      "o": "edible",
+      "y": "poisonous"
+    },
+    "ring-number": {
+      "n": "poisonous"
+    },
+    "ring-type": {
+      "f": "edible",
+      "l": "poisonous",
+      "n": "poisonous"
+    },
     "spore-print-color": {
       "b": "edible",
       "o": "edible",
@@ -27,24 +101,265 @@
       "u": "edible",
       "y": "edible"
     },
-    "gill-size": {},
-    "stalk-root": {
-      "r": "edible"
+    "population": {
+      "a": "edible",
+      "n": "edible"
+    },
+    "habitat": {
+      "w": "edible"
     }
   },
   "engine_weights": {
-    "odor_foul": 6.0,
-    "spore_green": 5.5,
-    "gill_narrow": 3.5,
-    "stalk_root_missing": 2.5,
-    "bruises_no": 2.0,
-    "habitat_path_urban": 1.0,
-    "population_several": 1.5,
-    "gill_close": 1.5,
-    "odor_anchor": 3.5,
-    "stalk_root_tapered": 3.5,
-    "gill_wide": 2.5,
-    "bruises_yes": 2.0,
-    "gill_broad": 1.0
+    "odor-foul": {
+      "trait": "odor",
+      "values": [
+        "f",
+        "p",
+        "c",
+        "y",
+        "s",
+        "m"
+      ],
+      "side": "p",
+      "severity": "critical",
+      "weight": 6.0
+    },
+    "spore-green": {
+      "trait": "sporePrintColor",
+      "values": [
+        "r"
+      ],
+      "side": "p",
+      "severity": "critical",
+      "weight": 5.5
+    },
+    "gill-color-buff": {
+      "trait": "gillColor",
+      "values": [
+        "b"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 4.0
+    },
+    "gill-color-green": {
+      "trait": "gillColor",
+      "values": [
+        "r"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 2.0
+    },
+    "ring-large": {
+      "trait": "ringType",
+      "values": [
+        "l"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 4.0
+    },
+    "ring-type-none": {
+      "trait": "ringType",
+      "values": [
+        "n"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 2.0
+    },
+    "ring-number-none": {
+      "trait": "ringNumber",
+      "values": [
+        "n"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 2.0
+    },
+    "gill-narrow": {
+      "trait": "gillSize",
+      "values": [
+        "n"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 3.5
+    },
+    "gill-close": {
+      "trait": "gillSpacing",
+      "values": [
+        "c"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.5
+    },
+    "root-missing": {
+      "trait": "stalkRoot",
+      "values": [
+        "?"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 2.5
+    },
+    "bruises-no": {
+      "trait": "bruises",
+      "values": [
+        "f"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 2.0
+    },
+    "habitat-path": {
+      "trait": "habitat",
+      "values": [
+        "p"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.5
+    },
+    "habitat-urban": {
+      "trait": "habitat",
+      "values": [
+        "u"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.0
+    },
+    "population-several": {
+      "trait": "population",
+      "values": [
+        "v"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.5
+    },
+    "cap-umbonate": {
+      "trait": "capShape",
+      "values": [
+        "k"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.5
+    },
+    "stalk-above-buff": {
+      "trait": "stalkColorAbove",
+      "values": [
+        "b"
+      ],
+      "side": "p",
+      "severity": "warning",
+      "weight": 1.5
+    },
+    "odor-safety-anchor": {
+      "trait": "odor",
+      "values": [
+        "a",
+        "l"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 3.5
+    },
+    "gill-color-anchor": {
+      "trait": "gillColor",
+      "values": [
+        "e",
+        "o"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 2.0
+    },
+    "ring-flaring": {
+      "trait": "ringType",
+      "values": [
+        "f"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 1.5
+    },
+    "gill-broad": {
+      "trait": "gillSize",
+      "values": [
+        "b"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 1.0
+    },
+    "gill-wide": {
+      "trait": "gillSpacing",
+      "values": [
+        "w"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 2.5
+    },
+    "root-tapered": {
+      "trait": "stalkRoot",
+      "values": [
+        "r"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 3.5
+    },
+    "root-club": {
+      "trait": "stalkRoot",
+      "values": [
+        "c"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 1.5
+    },
+    "bruises-yes": {
+      "trait": "bruises",
+      "values": [
+        "t"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 2.0
+    },
+    "habitat-waste": {
+      "trait": "habitat",
+      "values": [
+        "w"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 1.5
+    },
+    "population-anchor": {
+      "trait": "population",
+      "values": [
+        "a",
+        "n"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 3.0
+    },
+    "cap-sunken": {
+      "trait": "capShape",
+      "values": [
+        "s"
+      ],
+      "side": "e",
+      "severity": "info",
+      "weight": 1.0
+    }
   }
 }
