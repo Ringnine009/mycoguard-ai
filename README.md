@@ -51,7 +51,7 @@ something you could actually put on GitHub.
 | Photo identification | `app/` FastAPI → qwen-vl-plus | base64 proxied; keys never in the browser |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | full UI works with no backend |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (57) + pytest (40) | see [Testing](#testing) |
+| Tests | vitest (89) + pytest (40) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -142,11 +142,35 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
    width shrinks as evidence accumulates; critical signals raise the floor
    to 0.80 but never to certainty.
 4. **Explainability.** Every verdict lists the rules that fired, with
-   severity (`info / warning / critical`) and plain-language details.
-5. **Statistical grounding.** Weights are the distilled result of a Random
-   Forest + purity scan over the UCI dataset — reproduce with
-   `scripts/analyze_dataset.py`. They describe **dataset associations**, not
-   biological laws.
+   severity (`info / warning / critical`) and plain-language details, plus a
+   deterministic **offline expert narrative** (no API needed) that names the
+   observed traits and signals — a strict upgrade of the old Gemini call.
+5. **Statistical grounding (real numbers).** Weights v2 come from running
+   `scripts/analyze_dataset.py` on the actual 8,124-row UCI dataset
+   (`distilled_rules.json` is committed):
+   - Random Forest held-out accuracy **100.00%** (test n=1625) — an honest
+     property of this *teaching* dataset, not a claim about field capability.
+   - Gini importance top-5: `odor 0.161 · gill-color 0.112 · gill-size 0.111 ·
+     spore-print-color 0.093 · ring-type 0.070`.
+   - 100%-purity branches: odors `c f m p s y` → poisonous (n=36…2160) and
+     `a l` → edible (n=400 each); spore-print `r` → poisonous (n=72);
+     gill-color `b` → poisonous (n=1728) / `e o` → edible; ring-type `l` →
+     poisonous (n=1296); population `a n` → edible (n=384/400); stalk-root
+     `r` → edible (n=192) — each mirrored as a rule with its support count.
+   - Fixes found by the data: `gill-color` and `ring-type` were top-5 traits
+     but had **zero weight** in the original engine; both now contribute.
+   These are **dataset associations, not biological laws**.
+6. **Dual-channel confidence fusion (photo mode).** The vision model's
+   self-reported confidence is treated as the *visual channel's reliability*
+   and fused into the final interval:
+   `point' = 0.65·engine + 0.35·model`; agreement
+   `|engine.point − model|` `< 0.12 → agree (interval ×0.85)`,
+   `0.12–0.30 → partial (×1.0)`, `> 0.30 → disagree (×1.2)`; a confident
+   model can never rescue an "unknown" verdict. The result page shows a
+   consistency chip (`一致 / 部分一致 / 存在分歧 / 未提供有效信息`).
+7. **One-click example scenarios.** Five teaching presets (大青褶伞 → high,
+   鸡油菌形态 → low, 毒蝇伞外观 → unknown, 混合信号 → medium, 信息不足 → unknown)
+   fill the trait form in one click — no 22-dropdown barrier for demos.
 
 ### Risk levels
 
@@ -162,14 +186,15 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
 ## Testing
 
 ```bash
-npx vitest run          # frontend: engine grading, forced-unknown, confidence
-                        # intervals, no-absolute-language, disclaimer presence,
-                        # constants integrity, backend client (mocked fetch),
-                        # presentation helpers
+npx vitest run          # frontend (89 tests): engine grading, forced-unknown,
+                        # confidence intervals, data-grounded rules, scenarios,
+                        # confidence fusion, expert narrative, no-absolute-
+                        # language, disclaimer presence, constants integrity,
+                        # backend client (mocked fetch), presentation helpers
 .venv\Scripts\python -m pytest app/tests -q
-                        # backend: settings/BOM parsing, KB retrieval, chat
-                        # rule/llm/fallback, vision parse+sanitize, API layer
-                        # with injected fakes (no network)
+                        # backend (40 tests): settings/BOM parsing, KB retrieval,
+                        # chat rule/llm/fallback, vision parse+sanitize, API
+                        # layer with injected fakes (no network)
 .venv\Scripts\python scripts/scan_secrets.py   # pre-commit credential scan
 ```
 
@@ -193,15 +218,17 @@ mycoguard/
 │   ├── knowledge/entries.py  # 26 curated public-commonsense entries
 │   └── tests/                # pytest (40 tests)
 ├── src/                      # React 19 + TS + Vite frontend
-│   ├── engine/               # mushroomEngine.ts, merge.ts, presentation.ts
+│   ├── engine/               # mushroomEngine.ts, merge.ts (fusion),
+│   │                         # scenarios.ts, expert.ts, presentation.ts
 │   ├── services/backend.ts   # health probe, upload, chat (offline-safe)
-│   ├── components/           # canvas, trait panel, photo capture, result,
-│   │                         # chat, disclaimer, status, icons
-│   ├── styles/global.css     # dark tech design system (mobile-ready)
-│   └── __tests__/            # vitest (57 tests)
+│   ├── components/           # canvas, trait panel, scenario chips, photo
+│   │                         # capture, result, chat, disclaimer, icons
+│   ├── styles/global.css     # light design system (mobile-ready)
+│   └── __tests__/            # vitest (89 tests)
 ├── scripts/
 │   ├── analyze_dataset.py    # UCI RF distillation (evidence script)
 │   └── scan_secrets.py       # pre-commit secret scanner
+├── distilled_rules.json      # generated evidence (committed)
 ├── .env.example  ·  LICENSE (MIT)  ·  README.md
 ```
 
@@ -241,7 +268,15 @@ mycoguard/
   可选 DeepSeek 润色，控制规模不做完整 RAG。
 - **合规**：删除 Gemini 依赖与"准确率 100%"等绝对化表述；`.env` 不入库；
   `scripts/scan_secrets.py` 提交前扫描密钥；TechSpec/README 已重写为合规版本。
-- **测试**：vitest 57 项 + pytest 40 项（LLM 全部 mock，离线可跑）。
+- **数据背书**：`scripts/analyze_dataset.py` 已在真实 UCI 数据集（8,124 行）上
+  跑通并提交 `distilled_rules.json`（留出集准确率 100.00%、Gini 重要性、100%
+  纯度分支）；引擎权重 v2 按真实数据校准（修复了原引擎 gill-color / ring-type
+  零权重缺口）。
+- **易用性**：5 个一键示例场景（大青褶伞→高、鸡油菌形态→低、毒蝇伞外观→无法
+  判断、混合信号→中、信息不足→无法判断）；拍照模式置信度融合（视觉 model
+  confidence 参与最终区间 + 双通道一致性指示）；离线结果页提供确定性"专家解读"
+  （严格不弱于原版 Gemini 解释文本）。
+- **测试**：vitest 89 项 + pytest 40 项（LLM 全部 mock，离线可跑）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端
 `pip install -r app/requirements.txt && uvicorn app.main:app --port 8000`，
@@ -253,16 +288,19 @@ mycoguard/
 
 - **Dataset bias.** The UCI Mushrooms dataset is a curated teaching set
   (poisonous/edible roughly balanced) — it does **not** reflect real-world
-  species distributions or local flora. Weights describe dataset
-  associations, not biological laws.
+  species distributions or local flora. The 100.00% held-out accuracy is a
+  property of that easy dataset, not a field-identification guarantee.
+- **Weights encode dataset statistics, not mycology.** Rules like "buff gill
+  color → high risk" come from purity branches in this dataset; a real
+  mushroom may differ. Every verdict is a statistical prior, not evidence.
 - **Vision is observational, not forensic.** qwen-vl-plus reports only what
   it can see; it cannot reliably distinguish look-alike species, and a bad
   photo yields `unknown` (by design).
+- **No field validation.** The distilled weights were not re-validated on
+  independent field samples.
 - **KB is educational-scale.** The knowledge base is a curated handful of
   entries (keyword retrieval, not full RAG) — fine for FAQ-style safety
   questions, not a mycological reference.
-- **No field validation.** The distilled weights were not re-validated on
-  independent field samples; treat every verdict as a prior, not evidence.
 - **Chat LLM is optional.** Without `DEEPSEEK_API_KEY`, chat answers from the
   knowledge base directly (rule mode).
 
