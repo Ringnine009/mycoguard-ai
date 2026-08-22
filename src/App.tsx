@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackendHealth, MushroomTraits, RiskAssessment, VisionResult } from './types';
 import { computeRiskAssessment } from './engine/mushroomEngine';
 import { evaluateVision, mergeTraits } from './engine/merge';
+import { SCENARIOS, Scenario } from './engine/scenarios';
 import { probeHealth, analyzePhoto, OfflineError, ApiError } from './services/backend';
 import { MushroomCanvas } from './components/MushroomCanvas';
 import { TraitPanel } from './components/TraitPanel';
@@ -44,6 +45,13 @@ const App: React.FC = () => {
       return next;
     });
     setAssessment(null);
+  }, []);
+
+  const applyScenario = useCallback((s: Scenario) => {
+    setTraits({ ...s.traits });
+    setAssessment(null);
+    setVision(null);
+    setPhotoError(null);
   }, []);
 
   const runManual = useCallback(() => {
@@ -121,7 +129,23 @@ const App: React.FC = () => {
           </div>
 
           {tab === 'manual' ? (
-            <TraitPanel traits={traits} disabled={analyzing} onChange={handleTraitChange} />
+            <>
+              <div className="scenario-row" aria-label="示例场景">
+                <div className="scenario-title">示例场景（一键填充）</div>
+                {SCENARIOS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="scenario-chip"
+                    title={s.description}
+                    onClick={() => applyScenario(s)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <TraitPanel traits={traits} disabled={analyzing} onChange={handleTraitChange} />
+            </>
           ) : (
             <PhotoCapture photo={photo} disabled={analyzing} onPhoto={setPhoto} onClear={clearPhoto} />
           )}
@@ -165,7 +189,7 @@ const App: React.FC = () => {
           </div>
 
           {assessment ? (
-            <ResultPanel assessment={assessment} vision={vision} filledTraits={filledCount} />
+            <ResultPanel assessment={assessment} traits={traits} vision={vision} filledTraits={filledCount} />
           ) : (
             <div className="empty-state">
               <div className="es-icon">🍄</div>

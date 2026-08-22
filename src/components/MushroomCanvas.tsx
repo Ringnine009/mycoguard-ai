@@ -10,14 +10,14 @@ interface MushroomCanvasProps {
  * Real-time parametric SVG mushroom renderer.
  * Two views: side morphology + underside (gill) view. Every visible trait
  * (shape, color, gills, rings, bruising) updates the drawing instantly.
- * Ported from the original course project and restyled for the dark theme.
+ * Ported from the original course project and restyled for the light theme.
  */
 export const MushroomCanvas: React.FC<MushroomCanvasProps> = ({ traits }) => {
   const capColor = COLOR_MAP[traits.capColor || ''] || '#b45309';
   const stalkColorAbove = COLOR_MAP[traits.stalkColorAbove || ''] || '#d6d3d1';
   const stalkColorBelow = COLOR_MAP[traits.stalkColorBelow || ''] || '#d6d3d1';
   const gillColor = COLOR_MAP[traits.gillColor || ''] || '#e5e7eb';
-  const neutralStalk = '#3f3f46';
+  const neutralStalk = '#8a8f98';
 
   const getCapPath = () => {
     switch (traits.capShape) {

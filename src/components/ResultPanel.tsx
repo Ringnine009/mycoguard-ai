@@ -1,6 +1,7 @@
 import React from 'react';
-import { RiskAssessment, VisionResult } from '../types';
+import { MushroomTraits, RiskAssessment, VisionResult } from '../types';
 import { formatConfidence, riskPresentation } from '../engine/presentation';
+import { buildExpertNarrative } from '../engine/expert';
 import { DisclaimerBanner } from './disclaimer';
 import { AlertTriangle, HelpCircle, ShieldAlert, ShieldCheck, ShieldX } from './icons';
 
@@ -17,20 +18,30 @@ const SEV_ICON: Record<string, React.ReactNode> = {
   info: <HelpCircle size={14} />,
 };
 
+/** Dual-channel consistency labels (vision vs rule engine). */
+const CONSISTENCY_LABEL: Record<string, string> = {
+  agree: '视觉与规则：一致',
+  partial: '视觉与规则：部分一致',
+  disagree: '视觉与规则：存在分歧',
+  'n-a': '视觉：未提供有效信息',
+};
+
 interface ResultPanelProps {
   assessment: RiskAssessment;
+  traits: MushroomTraits;
   vision?: VisionResult | null;
   /** Trait count currently filled (for the incomplete hint). */
   filledTraits: number;
 }
 
-export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, vision, filledTraits }) => {
+export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vision, filledTraits }) => {
   const meta = riskPresentation(assessment.riskLevel);
   const tone = TONE_CLASS[meta.tone];
   const conf = formatConfidence(assessment.confidence);
   const lowerPct = Math.round(assessment.confidence.lower * 100);
   const upperPct = Math.round(assessment.confidence.upper * 100);
   const pointPct = Math.round(assessment.confidence.point * 100);
+  const consistency = assessment.visionConsistency;
 
   const RiskIcon = meta.icon === 'shield-x' ? ShieldX : meta.icon === 'shield-alert' ? ShieldAlert : meta.icon === 'shield-check' ? ShieldCheck : HelpCircle;
 
@@ -80,6 +91,9 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, vision, fi
                 </span>
               )}
               {vision.notes && <span className="chip vision">{vision.notes}</span>}
+              {consistency && (
+                <span className={`chip consistency ${consistency}`}>{CONSISTENCY_LABEL[consistency]}</span>
+              )}
             </div>
           )}
 
@@ -108,6 +122,11 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, vision, fi
               </div>
             </div>
           )}
+
+          <div>
+            <div className="section-label">专家解读（离线可解释性）</div>
+            <div className="reasoning-box expert">{buildExpertNarrative(assessment, traits)}</div>
+          </div>
 
           <div>
             <div className="section-label">推理说明</div>
