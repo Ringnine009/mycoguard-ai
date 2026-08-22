@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,6 +26,7 @@ from .services.llm_client import LLMClient, LLMError
 from .services.vision import VisionError, analyze_image
 
 APP_VERSION = "2.0.0"
+MAX_CHAT_QUESTION_LENGTH = 2000
 
 
 class ChatRequest(BaseModel):
@@ -90,8 +92,6 @@ def create_app(
     async def analyze(file: UploadFile = File(...)) -> dict:
         llm = app.state.vision_llm
         if llm is None:
-            from fastapi.responses import JSONResponse
-
             return JSONResponse(
                 status_code=503,
                 content={
@@ -100,9 +100,23 @@ def create_app(
                 },
             )
         mime = file.content_type or "application/octet-stream"
-        data = await file.read()
-        if len(data) > settings.max_upload_bytes:
+
+        # Reject oversized uploads WITHOUT buffering the whole body:
+        # 1) trust Content-Length when the client declares it; 2) otherwise
+        # stream-read in bounded chunks and abort as soon as the cap is hit.
+        declared = file.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > settings.max_upload_bytes:
             raise HTTPException(status_code=413, detail="图片过大（上限 8MB）。")
+
+        data = bytearray()
+        while True:
+            chunk = await file.read(256 * 1024)
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > settings.max_upload_bytes:
+                raise HTTPException(status_code=413, detail="图片过大（上限 8MB）。")
+        data = bytes(data)
 
         try:
             return analyze_image(llm, data, mime)
@@ -118,6 +132,11 @@ def create_app(
         question = (req.question or "").strip()
         if not question:
             raise HTTPException(status_code=422, detail="question 不能为空")
+        if len(question) > MAX_CHAT_QUESTION_LENGTH:
+            raise HTTPException(
+                status_code=422,
+                detail=f"问题过长（上限 {MAX_CHAT_QUESTION_LENGTH} 字符）。",
+            )
         return answer_question(app.state.kb, question, llm=app.state.chat_llm)
 
     # Production: serve the built frontend from ../dist when present.

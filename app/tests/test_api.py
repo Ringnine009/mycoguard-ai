@@ -152,6 +152,37 @@ def test_chat_requires_question(full_app):
     assert res.status_code == 422
 
 
+def test_chat_question_too_long_returns_422(full_app):
+    client = TestClient(full_app)
+    res = client.post("/api/chat", json={"question": "菇" * 2001})
+    assert res.status_code == 422
+    assert "过长" in res.json()["detail"]
+
+
+def test_analyze_oversized_file_returns_413(full_app):
+    """8MB cap must be enforced without buffering the whole body (DoS guard)."""
+    client = TestClient(full_app)
+    big = b"0" * (8 * 1024 * 1024 + 1)
+    res = client.post(
+        "/api/analyze",
+        files={"file": ("big.png", big, "image/png")},
+    )
+    assert res.status_code == 413
+    assert "过大" in res.json()["detail"]
+
+
+def test_analyze_accepts_just_under_limit(full_app):
+    """Files under the cap still reach the (mocked) vision service."""
+    client = TestClient(full_app)
+    payload = b"x" * (256 * 1024)  # 256 KB, well under 8 MB
+    res = client.post(
+        "/api/analyze",
+        files={"file": ("mid.png", payload, "image/png")},
+    )
+    # VisionError (not an image) → 415 proves we got past the size guard.
+    assert res.status_code == 415
+
+
 def test_health_does_not_leak_keys(full_app):
     client = TestClient(full_app)
     body = client.get("/api/health").json()
