@@ -77,4 +77,26 @@ describe('analyzePhoto', () => {
     const file = new File(['x'], 'm.png', { type: 'image/png' });
     await expect(analyzePhoto(file)).rejects.toBeInstanceOf(ApiError);
   });
+
+  it('maps the backend snake_case payload to the camelCase VisionResult', async () => {
+    // The FastAPI proxy answers in Python naming: species_guess / confidence / traits / notes.
+    stubFetch(() =>
+      Promise.resolve(
+        okJson({
+          status: 'ok',
+          species_guess: 'Amanita muscaria',
+          confidence: 0.9,
+          traits: { capColor: 'r' },
+          notes: 'red cap',
+          warnings: [],
+        }),
+      ),
+    );
+    const file = new File(['x'], 'm.png', { type: 'image/png' });
+    const result = await analyzePhoto(file);
+    expect(result.speciesGuess).toBe('Amanita muscaria');
+    expect(result.modelConfidence).toBe(0.9);
+    expect(result.traits).toEqual({ capColor: 'r' });
+    expect(result.notes).toBe('red cap');
+  });
 });

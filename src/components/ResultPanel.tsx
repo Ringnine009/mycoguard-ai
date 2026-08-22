@@ -2,6 +2,7 @@ import React from 'react';
 import { MushroomTraits, RiskAssessment, VisionResult } from '../types';
 import { formatConfidence, riskPresentation } from '../engine/presentation';
 import { buildExpertNarrative } from '../engine/expert';
+import { buildVisionPipeline } from '../engine/pipeline';
 import { DisclaimerBanner } from './disclaimer';
 import { AlertTriangle, HelpCircle, ShieldAlert, ShieldCheck, ShieldX } from './icons';
 
@@ -83,6 +84,23 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
         </div>
 
         <div className="result-body">
+          {vision && (
+            <div>
+              <div className="section-label">双通道分析链路</div>
+              <div className="pipeline">
+                {buildVisionPipeline(vision, assessment, filledTraits).map((step, i) => (
+                  <React.Fragment key={step.id}>
+                    {i > 0 && <span className="pipeline-arrow">→</span>}
+                    <div className={`pipeline-step${step.active ? ' active' : ''}`}>
+                      <div className="ps-kicker">{step.kicker}</div>
+                      <div className="ps-detail">{step.detail}</div>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+
           {vision && (
             <div className="chip-row">
               {vision.speciesGuess && (

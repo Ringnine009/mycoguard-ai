@@ -5,6 +5,8 @@ import { CORE_TRAITS, ADVANCED_TRAITS } from '../constants';
 interface TraitPanelProps {
   traits: MushroomTraits;
   disabled?: boolean;
+  /** Trait keys that came from the vision model (photo mode) — shown as badges. */
+  visionTraits?: ReadonlySet<string>;
   onChange: (id: keyof MushroomTraits, value: string) => void;
 }
 
@@ -12,11 +14,13 @@ function TraitField({
   def,
   value,
   disabled,
+  fromVision,
   onChange,
 }: {
   def: TraitDefinition;
   value: string | undefined;
   disabled?: boolean;
+  fromVision?: boolean;
   onChange: (id: keyof MushroomTraits, value: string) => void;
 }) {
   return (
@@ -25,6 +29,11 @@ function TraitField({
         <span>
           {def.label}
           {def.critical && <span className="critical-mark"> *</span>}
+          {fromVision && (
+            <span className="vision-badge" title="该性状由拍照识别提取">
+              ● vision
+            </span>
+          )}
         </span>
         {def.hint && <span className="trait-hint">{def.hint}</span>}
       </label>
@@ -46,9 +55,10 @@ function TraitField({
   );
 }
 
-export const TraitPanel: React.FC<TraitPanelProps> = ({ traits, disabled, onChange }) => {
+export const TraitPanel: React.FC<TraitPanelProps> = ({ traits, disabled, visionTraits, onChange }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const filled = Object.values(traits).filter((v) => v).length;
+  const visionCount = visionTraits ? [...visionTraits].filter((k) => traits[k as keyof MushroomTraits]).length : 0;
 
   return (
     <div className="input-scroll">
@@ -57,7 +67,14 @@ export const TraitPanel: React.FC<TraitPanelProps> = ({ traits, disabled, onChan
           <span className="dot core" /> 核心关键特征
         </div>
         {CORE_TRAITS.map((t) => (
-          <TraitField key={t.id} def={t} value={traits[t.id]} disabled={disabled} onChange={onChange} />
+          <TraitField
+            key={t.id}
+            def={t}
+            value={traits[t.id]}
+            disabled={disabled}
+            fromVision={visionTraits?.has(t.id)}
+            onChange={onChange}
+          />
         ))}
       </div>
 
@@ -76,13 +93,20 @@ export const TraitPanel: React.FC<TraitPanelProps> = ({ traits, disabled, onChan
             <span className="dot adv" /> 辅助观察项
           </div>
           {ADVANCED_TRAITS.map((t) => (
-            <TraitField key={t.id} def={t} value={traits[t.id]} disabled={disabled} onChange={onChange} />
+            <TraitField
+              key={t.id}
+              def={t}
+              value={traits[t.id]}
+              disabled={disabled}
+              fromVision={visionTraits?.has(t.id)}
+              onChange={onChange}
+            />
           ))}
         </div>
       )}
 
       <div className="footer-tech" style={{ marginTop: 14 }}>
-        <span>已观察 {filled} / 22 项</span>
+        <span>已观察 {filled} / 22 项{visionCount > 0 ? `（含视觉 ${visionCount} 项）` : ''}</span>
         <span>≥ 3 项才可给出方向性判断</span>
       </div>
     </div>

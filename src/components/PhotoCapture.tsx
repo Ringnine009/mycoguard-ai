@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Camera, Trash, Upload } from './icons';
+import { Camera, Trash, Upload, Spinner } from './icons';
+import { SAMPLE_PHOTOS, SamplePhoto } from '../engine/samples';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const MAX_EDGE = 1600;
@@ -13,14 +14,14 @@ export interface PreparedPhoto {
 }
 
 /** Downscale + re-encode to JPEG client-side (smaller payload, strips EXIF). */
-async function preparePhoto(file: File): Promise<PreparedPhoto> {
+async function preparePhoto(blob: Blob, name: string): Promise<PreparedPhoto> {
   let width = 0;
   let height = 0;
   let bitmap: ImageBitmap | HTMLImageElement | null = null;
 
   try {
     if ('createImageBitmap' in window) {
-      bitmap = await createImageBitmap(file);
+      bitmap = await createImageBitmap(blob);
       width = bitmap.width;
       height = bitmap.height;
     }
@@ -31,9 +32,9 @@ async function preparePhoto(file: File): Promise<PreparedPhoto> {
   if (!bitmap) {
     // Fallback: upload as-is (server still downscales + strips metadata).
     return {
-      blob: file,
-      previewUrl: URL.createObjectURL(file),
-      fileName: file.name,
+      blob,
+      previewUrl: URL.createObjectURL(blob),
+      fileName: name,
       width: 0,
       height: 0,
     };
@@ -47,23 +48,35 @@ async function preparePhoto(file: File): Promise<PreparedPhoto> {
   if (!ctx) throw new Error('canvas 不可用');
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
+  const outBlob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('图片编码失败'))), 'image/jpeg', 0.85);
   });
 
-  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.jpg';
-  const fileName = file.name.replace(ext, '') + '.jpg';
-  return { blob, previewUrl: URL.createObjectURL(blob), fileName, width: canvas.width, height: canvas.height };
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '.jpg';
+  const fileName = name.replace(ext, '') + '.jpg';
+  return { blob: outBlob, previewUrl: URL.createObjectURL(outBlob), fileName, width: canvas.width, height: canvas.height };
 }
 
 interface PhotoCaptureProps {
   photo: PreparedPhoto | null;
   disabled?: boolean;
+  /** Current photo-analysis stage, driven by App (for the status line). */
+  stage?: PhotoStage;
   onPhoto: (photo: PreparedPhoto) => void;
   onClear: () => void;
 }
 
-export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ photo, disabled, onPhoto, onClear }) => {
+export type PhotoStage = 'idle' | 'preparing' | 'analyzing' | 'extracted' | 'error';
+
+const STAGE_TEXT: Record<PhotoStage, string> = {
+  idle: '',
+  preparing: '图片预处理中…',
+  analyzing: '上传中 · 视觉模型分析中…',
+  extracted: '✓ 视觉性状已提取',
+  error: '分析失败，请重试',
+};
+
+export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ photo, disabled, stage = 'idle', onPhoto, onClear }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,9 +93,21 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ photo, disabled, onP
       return;
     }
     try {
-      onPhoto(await preparePhoto(file));
+      onPhoto(await preparePhoto(file, file.name));
     } catch (err) {
       setError(err instanceof Error ? err.message : '图片处理失败。');
+    }
+  };
+
+  const handleSample = async (sample: SamplePhoto) => {
+    setError(null);
+    try {
+      const res = await fetch(sample.url);
+      if (!res.ok) throw new Error(`样例加载失败（HTTP ${res.status}）`);
+      const blob = await res.blob();
+      onPhoto(await preparePhoto(blob, sample.label));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '样例加载失败。');
     }
   };
 
@@ -145,6 +170,32 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ photo, disabled, onP
       )}
 
       {error && <div className="form-error">{error}</div>}
+
+      {stage !== 'idle' && (
+        <div className="status-line" role="status" aria-live="polite">
+          {stage === 'analyzing' || stage === 'preparing' ? <Spinner size={14} /> : null}
+          <span className={stage === 'extracted' ? 'ok' : ''}>{STAGE_TEXT[stage]}</span>
+        </div>
+      )}
+
+      {SAMPLE_PHOTOS.length > 0 && (
+        <div className="sample-row">
+          <span className="scenario-title" style={{ width: '100%', marginBottom: 2 }}>
+            试用样例（无相机环境）
+          </span>
+          {SAMPLE_PHOTOS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="sample-chip"
+              disabled={disabled}
+              onClick={() => void handleSample(s)}
+            >
+              🍄 {s.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="form-note">
         视觉识别通过后端代理调用多模态模型（qwen-vl-plus），模型只会记录它实际看到的性状；

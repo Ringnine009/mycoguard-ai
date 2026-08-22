@@ -6,7 +6,7 @@ import { SCENARIOS, Scenario } from './engine/scenarios';
 import { probeHealth, analyzePhoto, OfflineError, ApiError } from './services/backend';
 import { MushroomCanvas } from './components/MushroomCanvas';
 import { TraitPanel } from './components/TraitPanel';
-import { PhotoCapture, PreparedPhoto } from './components/PhotoCapture';
+import { PhotoCapture, PhotoStage, PreparedPhoto } from './components/PhotoCapture';
 import { ResultPanel } from './components/ResultPanel';
 import { ChatPanel } from './components/ChatPanel';
 import { StatusBadge } from './components/StatusBadge';
@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [tab, setTab] = useState<Tab>('manual');
   const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [photoStage, setPhotoStage] = useState<PhotoStage>('idle');
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,6 +37,12 @@ const App: React.FC = () => {
   }, []);
 
   const filledCount = useMemo(() => Object.values(traits).filter((v) => v).length, [traits]);
+
+  /** Trait keys extracted by the vision model — shown as "vision" badges. */
+  const visionTraitKeys = useMemo(
+    () => new Set<string>(vision ? Object.keys(vision.traits) : []),
+    [vision],
+  );
 
   const handleTraitChange = useCallback((id: keyof MushroomTraits, value: string) => {
     setTraits((prev) => {
@@ -52,6 +59,7 @@ const App: React.FC = () => {
     setAssessment(null);
     setVision(null);
     setPhotoError(null);
+    setPhotoStage('idle');
   }, []);
 
   const runManual = useCallback(() => {
@@ -61,6 +69,7 @@ const App: React.FC = () => {
   const runPhoto = useCallback(async () => {
     if (!photo) return;
     setAnalyzing(true);
+    setPhotoStage('analyzing');
     setPhotoError(null);
     try {
       const v = await analyzePhoto(photo.blob, photo.fileName);
@@ -68,7 +77,9 @@ const App: React.FC = () => {
       // Vision fills observation gaps; manual observations win on conflict.
       setTraits((prev) => mergeTraits(prev, v.traits));
       setAssessment(evaluateVision(traits, v));
+      setPhotoStage('extracted');
     } catch (err) {
+      setPhotoStage('error');
       if (err instanceof OfflineError) {
         setPhotoError('后端视觉服务未配置或不可用——已回退纯离线模式，请改用性状鉴定。');
       } else if (err instanceof ApiError) {
@@ -87,6 +98,7 @@ const App: React.FC = () => {
     setVision(null);
     setPhotoError(null);
     setAssessment(null);
+    setPhotoStage('idle');
   }, []);
 
   return (
@@ -144,10 +156,10 @@ const App: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <TraitPanel traits={traits} disabled={analyzing} onChange={handleTraitChange} />
+              <TraitPanel traits={traits} disabled={analyzing} visionTraits={visionTraitKeys} onChange={handleTraitChange} />
             </>
           ) : (
-            <PhotoCapture photo={photo} disabled={analyzing} onPhoto={setPhoto} onClear={clearPhoto} />
+            <PhotoCapture photo={photo} disabled={analyzing} stage={photoStage} onPhoto={setPhoto} onClear={clearPhoto} />
           )}
 
           <div style={{ padding: '0 16px 16px' }}>

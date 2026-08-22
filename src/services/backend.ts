@@ -56,7 +56,39 @@ export async function analyzePhoto(file: Blob, fileName = 'mushroom.jpg'): Promi
   const res = await fetch(`${API_BASE}/analyze`, { method: 'POST', body: form });
   if (res.status === 503) throw new OfflineError(await safeText(res));
   if (!res.ok) throw new ApiError(await safeText(res));
-  return (await res.json()) as VisionResult;
+  return normalizeVision(await res.json());
+}
+
+/**
+ * Map the backend's Python-style payload (species_guess, confidence, …) to
+ * the camelCase VisionResult contract. Tolerant: accepts both namings so a
+ * cached/mocked response in either shape keeps working.
+ */
+function normalizeVision(raw: unknown): VisionResult {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const speciesGuess =
+    typeof r.speciesGuess === 'string'
+      ? r.speciesGuess
+      : typeof r.species_guess === 'string'
+        ? r.species_guess
+        : null;
+  const confidence =
+    typeof r.modelConfidence === 'number'
+      ? r.modelConfidence
+      : typeof r.confidence === 'number'
+        ? r.confidence
+        : 0;
+  const traits = (typeof r.traits === 'object' && r.traits !== null ? r.traits : {}) as VisionResult['traits'];
+  const notes = typeof r.notes === 'string' ? r.notes : '';
+  const warnings = Array.isArray(r.warnings) ? (r.warnings as string[]) : [];
+  return {
+    status: 'ok',
+    speciesGuess,
+    modelConfidence: Math.min(1, Math.max(0, confidence)),
+    traits,
+    notes,
+    warnings,
+  };
 }
 
 /** Ask the safety-knowledge Q&A endpoint. */
