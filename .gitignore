@@ -4,7 +4,7 @@
 !.env.example
 
 # --- Original course source (reference only, not shipped) ---
-_source/
+_source*/
 
 # --- Node / frontend ---
 node_modules/

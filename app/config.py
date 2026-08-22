@@ -83,4 +83,5 @@ def load_settings(env_files: list[Path] | None = None) -> Settings:
         deepseek_openai_compat_url=get("DEEPSEEK_OPENAI_COMPAT_URL") or DEFAULT_DEEPSEEK_URL,
         vision_model=get("MYCOGUARD_VISION_MODEL", "qwen-vl-plus"),
         chat_model=get("MYCOGUARD_CHAT_MODEL", "deepseek-chat"),
+        max_upload_bytes=int(get("MYCOGUARD_MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))),
     )
