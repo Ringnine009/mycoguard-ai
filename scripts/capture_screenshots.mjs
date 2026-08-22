@@ -37,10 +37,16 @@ await page.getByRole('button', { name: /开始分析/ }).click();
 await page.waitForTimeout(400);
 await page.screenshot({ path: resolve(OUT_DIR, 'screenshot-2-high-risk-result.png'), fullPage: true });
 
-// 3) Photo mode tab (dropzone UI).
+// 3) Photo mode tab (dropzone UI + sample entry).
 await page.getByRole('tab', { name: /拍照识别/ }).click();
 await page.waitForTimeout(300);
 await page.screenshot({ path: resolve(OUT_DIR, 'screenshot-3-photo-mode.png') });
+
+// 4) Sample photo loaded into the preview (no camera needed).
+const sample = page.locator('.sample-chip').first();
+await sample.click();
+await page.waitForTimeout(800);
+await page.screenshot({ path: resolve(OUT_DIR, 'screenshot-4-photo-sample.png') });
 
 await browser.close();
 console.log('screenshots written to', OUT_DIR);
