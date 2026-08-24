@@ -44,7 +44,8 @@ something you could actually put on GitHub.
 | Capability | Where | Notes |
 |---|---|---|
 | 22-trait manual selector | `src/` frontend | core + advanced groups |
-| Real-time SVG morphology renderer | `src/components/MushroomCanvas.tsx` | v4 product-illustration: gradients, lighting, per-trait textures (scales/grooves/fibres/gloss), ring & volva structures, 400 ms morph animation |
+| Real-time SVG morphology renderer | `src/components/MushroomCanvas.tsx` | v5 illustration: gradients/lighting/textures/ring-&-volva, **geometry-guarded** (all trait combos inside the viewBox, ≥8px margin — 294-case vitest + qwen-vl visual review) |
+| **Bilingual UI (zh/EN)** | `src/i18n.tsx` | one-click toggle, instant switch; risk tiers, expert narrative, rules, disclaimers, all labels translated |
 | Offline rule engine | `src/engine/mushroomEngine.ts` | weights distilled from UCI data |
 | Uncertainty grading | engine | low / medium / high / **unknown** (forced when input < 3 traits) |
 | Confidence **interval** | engine + UI | `(0, 0.97]`, never 100% |
@@ -52,7 +53,7 @@ something you could actually put on GitHub.
 | Photo flow UX | frontend | live stages (preparing → analyzing → traits extracted), **"vision" badges** on vision-derived traits, dual-channel pipeline strip, bundled **sample photos** (`samples/`, try without a camera) |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (98) + pytest (43) | see [Testing](#testing) |
+| Tests | vitest (399) + pytest (43) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -297,12 +298,15 @@ mycoguard/
   判断、混合信号→中、信息不足→无法判断）；拍照模式置信度融合（视觉 model
   confidence 参与最终区间 + 双通道一致性指示）；离线结果页提供确定性"专家解读"
   （严格不弱于原版 Gemini 解释文本）。
-- **演示强化（v4）**：SVG 蘑菇渲染升级为"产品级插画"（径向/线性渐变光影、菌盖
-  鳞片/凹槽/纤维/高光纹理、菌环与菌托结构、性状变化 400ms 过渡动画）；拍照识别
-  展示完整过程状态（上传中 → 视觉分析中 → 性状已提取）、表单"vision"徽章标记
-  视觉来源性状、结果页"视觉 → 性状 → 规则引擎 → 融合置信度"双通道链路图；
-  `samples/` 内置样例照片，"试用样例"一键体验（无需相机）。
-- **测试**：vitest 98 项 + pytest 43 项（LLM 全部 mock，离线可跑）。
+- **演示强化（v5）**：SVG 蘑菇渲染升级为"产品级插画"（渐变光影、菌盖鳞片/凹槽/
+  纤维/高光纹理、菌环与菌托结构、400ms 过渡动画），并修复菌柄越界 bug（几何
+  校验 294 组合全绿 + qwen-vl 视觉审查确认"菌柄完整、构图自然"）；拍照识别
+  展示完整过程状态（上传中 → 视觉分析中 → 性状已提取）、结果页展示分析所用照片
+  （点击放大/灯箱）、表单"vision"徽章标记视觉来源性状、双通道链路图；`samples/`
+  内置样例照片一键体验。
+- **中英双语（v5）**：右上角 EN / 中文 一键切换、即时生效；风险分级、专家解读、
+  规则文案、免责声明与全部界面标签均已双语化（字典 `src/i18n.tsx`）。
+- **测试**：vitest 399 项 + pytest 43 项（LLM 全部 mock，离线可跑）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端
 `pip install -r app/requirements.txt && uvicorn app.main:app --port 8000`，

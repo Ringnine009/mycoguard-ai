@@ -447,6 +447,89 @@ body {
 }
 
 /* ---------- Mushroom canvas v4 (illustration) ---------- */
+.lang-toggle {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lang-toggle:hover {
+  background: rgba(79, 70, 229, 0.14);
+  border-color: rgba(79, 70, 229, 0.55);
+}
+
+/* ---------- Analyzed photo card + lightbox ---------- */
+.used-photo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: zoom-in;
+  transition: all 0.15s ease;
+  font-family: var(--sans);
+}
+
+.used-photo:hover {
+  border-color: rgba(79, 70, 229, 0.45);
+  background: var(--accent-dim);
+}
+
+.used-photo img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.used-photo span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.96);
+  display: grid;
+  place-items: center;
+  cursor: zoom-out;
+  padding: 24px;
+}
+
+.lightbox img {
+  max-width: 92vw;
+  max-height: 84vh;
+  border-radius: var(--radius);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
+  background: #fff;
+}
+
+.lightbox-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--faint);
+  font-weight: 600;
+}
+
 .mush-canvas * {
   transition: fill 0.4s ease, stroke 0.4s ease, stroke-opacity 0.4s ease, opacity 0.4s ease;
 }

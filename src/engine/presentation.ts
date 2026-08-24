@@ -1,8 +1,10 @@
-import { ConfidenceInterval, RiskLevel } from '../types';
+import { ConfidenceInterval, RiskLevel, RuleHit } from '../types';
+import { Lang, ruleEn, translate } from '../i18n';
 
 /**
  * Presentation helpers for risk + confidence rendering.
- * Pure functions — easily unit-tested.
+ * Pure functions — easily unit-tested. Default language is zh so existing
+ * call sites and tests keep working.
  */
 
 export interface RiskMeta {
@@ -11,6 +13,14 @@ export interface RiskMeta {
   icon: string;
 }
 
+const RISK_META_ZH: Record<RiskLevel, Omit<RiskMeta, 'label'> & { zh: string }> = {
+  low: { zh: '低风险', tone: 'safe', icon: 'shield-check' },
+  medium: { zh: '中风险', tone: 'warn', icon: 'shield-alert' },
+  high: { zh: '高风险', tone: 'danger', icon: 'shield-x' },
+  unknown: { zh: '无法判断', tone: 'muted', icon: 'help' },
+};
+
+/** Keyed by risk level so tests can enumerate the four tiers. */
 export const RISK_META: Record<RiskLevel, RiskMeta> = {
   low: { label: '低风险', tone: 'safe', icon: 'shield-check' },
   medium: { label: '中风险', tone: 'warn', icon: 'shield-alert' },
@@ -18,8 +28,9 @@ export const RISK_META: Record<RiskLevel, RiskMeta> = {
   unknown: { label: '无法判断', tone: 'muted', icon: 'help' },
 };
 
-export function riskPresentation(level: RiskLevel): RiskMeta {
-  return RISK_META[level];
+export function riskPresentation(level: RiskLevel, lang: Lang = 'zh'): RiskMeta {
+  const m = RISK_META[level];
+  return { ...m, label: translate(RISK_META_ZH[level].zh, lang) };
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -30,4 +41,14 @@ export function formatConfidence(c: ConfidenceInterval): { point: string; range:
     point: pct(c.point),
     range: `${pct(c.lower)} – ${pct(c.upper)}`,
   };
+}
+
+/** Bilingual label for a fired rule (fallback to the engine's Chinese). */
+export function ruleLabel(hit: RuleHit, lang: Lang = 'zh'): string {
+  return ruleEn(hit.id, lang).label ?? hit.label;
+}
+
+/** Bilingual detail for a fired rule (fallback to the engine's Chinese). */
+export function ruleDetail(hit: RuleHit, lang: Lang = 'zh'): string {
+  return ruleEn(hit.id, lang).detail ?? hit.detail;
 }

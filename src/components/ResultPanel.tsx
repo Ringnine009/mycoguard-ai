@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MushroomTraits, RiskAssessment, VisionResult } from '../types';
-import { formatConfidence, riskPresentation } from '../engine/presentation';
+import { formatConfidence, riskPresentation, ruleDetail, ruleLabel } from '../engine/presentation';
 import { buildExpertNarrative } from '../engine/expert';
 import { buildVisionPipeline } from '../engine/pipeline';
 import { DisclaimerBanner } from './disclaimer';
+import { useI18n } from '../i18n';
 import { AlertTriangle, HelpCircle, ShieldAlert, ShieldCheck, ShieldX } from './icons';
 
 const TONE_CLASS: Record<string, string> = {
@@ -19,8 +20,8 @@ const SEV_ICON: Record<string, React.ReactNode> = {
   info: <HelpCircle size={14} />,
 };
 
-/** Dual-channel consistency labels (vision vs rule engine). */
-const CONSISTENCY_LABEL: Record<string, string> = {
+/** Dual-channel consistency labels (vision vs rule engine) — zh source, i18n at render. */
+const CONSISTENCY_ZH: Record<string, string> = {
   agree: '视觉与规则：一致',
   partial: '视觉与规则：部分一致',
   disagree: '视觉与规则：存在分歧',
@@ -31,12 +32,27 @@ interface ResultPanelProps {
   assessment: RiskAssessment;
   traits: MushroomTraits;
   vision?: VisionResult | null;
+  /** Preview URL of the analyzed photo (shown in the result page). */
+  photoUrl?: string;
   /** Trait count currently filled (for the incomplete hint). */
   filledTraits: number;
 }
 
-export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vision, filledTraits }) => {
-  const meta = riskPresentation(assessment.riskLevel);
+export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vision, photoUrl, filledTraits }) => {
+  const { t, lang } = useI18n();
+  const [zoom, setZoom] = useState(false);
+
+  // Close the lightbox with Escape (works regardless of focus).
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoom(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoom]);
+
+  const meta = riskPresentation(assessment.riskLevel, lang);
   const tone = TONE_CLASS[meta.tone];
   const conf = formatConfidence(assessment.confidence);
   const lowerPct = Math.round(assessment.confidence.lower * 100);
@@ -56,9 +72,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
               {meta.label}
             </span>
             <h2 className="result-title">
-              {assessment.incomplete
-                ? '信息不足，已强制「无法判断」'
-                : '风险分级结果（不确定性量化）'}
+              {assessment.incomplete ? t('信息不足，已强制「无法判断」') : t('风险分级结果（不确定性量化）')}
             </h2>
           </div>
         </div>
@@ -66,8 +80,8 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
         <div className="conf-block">
           <div className="conf-row">
             <span className="conf-point">{conf.point}</span>
-            <span className="conf-range">区间 {conf.range}</span>
-            <span className="conf-label">置信度区间</span>
+            <span className="conf-range">{t('区间')} {conf.range}</span>
+            <span className="conf-label">{t('置信度区间')}</span>
           </div>
           <div className="conf-bar">
             <div
@@ -84,11 +98,27 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
         </div>
 
         <div className="result-body">
+          {/* the analyzed photo, with click-to-zoom */}
+          {photoUrl && (
+            <div>
+              <button type="button" className="used-photo" onClick={() => setZoom(true)}>
+                <img src={photoUrl} alt={t('分析所用照片')} />
+                <span>{t('分析所用照片 · 点击放大')}</span>
+              </button>
+              {zoom && (
+                <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setZoom(false)}>
+                  <img src={photoUrl} alt={t('分析所用照片')} />
+                  <span className="lightbox-hint">{t('关闭')} (Esc / click)</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {vision && (
             <div>
-              <div className="section-label">双通道分析链路</div>
+              <div className="section-label">{t('双通道分析链路')}</div>
               <div className="pipeline">
-                {buildVisionPipeline(vision, assessment, filledTraits).map((step, i) => (
+                {buildVisionPipeline(vision, assessment, filledTraits, lang).map((step, i) => (
                   <React.Fragment key={step.id}>
                     {i > 0 && <span className="pipeline-arrow">→</span>}
                     <div className={`pipeline-step${step.active ? ' active' : ''}`}>
@@ -105,35 +135,38 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
             <div className="chip-row">
               {vision.speciesGuess && (
                 <span className="chip vision">
-                  疑似物种：{vision.speciesGuess}（模型自评 {(vision.modelConfidence * 100).toFixed(0)}%）
+                  {t('疑似物种：')}
+                  {vision.speciesGuess}
+                  {t('（模型自评')} {(vision.modelConfidence * 100).toFixed(0)}
+                  {t('%）')}
                 </span>
               )}
               {vision.notes && <span className="chip vision">{vision.notes}</span>}
               {consistency && (
-                <span className={`chip consistency ${consistency}`}>{CONSISTENCY_LABEL[consistency]}</span>
+                <span className={`chip consistency ${consistency}`}>{t(CONSISTENCY_ZH[consistency])}</span>
               )}
             </div>
           )}
 
           {assessment.incomplete && (
             <div className="guidance-box muted">
-              已录入 {filledTraits} 项性状，不足以给出方向性判断——这本身就是一个安全信号。
-              请补充 <strong>气味、孢子印颜色、菌褶大小</strong> 等关键性状后再分析。
+              {t('已录入')} {filledTraits} {t('项性状，不足以给出方向性判断——这本身就是一个安全信号。')}
+              {t('请补充')} <strong>{t('气味、孢子印颜色、菌褶大小')}</strong> {t('等关键性状后再分析。')}
             </div>
           )}
 
-          <div className={`guidance-box ${tone}`}>{assessment.guidance}</div>
+          <div className={`guidance-box ${tone}`}>{t(assessment.guidance)}</div>
 
           {assessment.ruleHits.length > 0 && (
             <div>
-              <div className="section-label">命中的规则（可解释性）</div>
+              <div className="section-label">{t('命中的规则（可解释性）')}</div>
               <div className="rule-list">
                 {assessment.ruleHits.map((hit) => (
                   <div className="rule-item" key={hit.id}>
                     <span className={`rule-sev ${hit.severity}`}>{SEV_ICON[hit.severity]}</span>
                     <div>
-                      <div className="rule-title">{hit.label}</div>
-                      <div className="rule-detail">{hit.detail}</div>
+                      <div className="rule-title">{ruleLabel(hit, lang)}</div>
+                      <div className="rule-detail">{ruleDetail(hit, lang)}</div>
                     </div>
                   </div>
                 ))}
@@ -142,13 +175,13 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
           )}
 
           <div>
-            <div className="section-label">专家解读（离线可解释性）</div>
-            <div className="reasoning-box expert">{buildExpertNarrative(assessment, traits)}</div>
+            <div className="section-label">{t('专家解读（离线可解释性）')}</div>
+            <div className="reasoning-box expert">{buildExpertNarrative(assessment, traits, lang)}</div>
           </div>
 
           <div>
-            <div className="section-label">推理说明</div>
-            <div className="reasoning-box">{assessment.reasoning}</div>
+            <div className="section-label">{t('推理说明')}</div>
+            <div className="reasoning-box">{t(assessment.reasoning)}</div>
           </div>
         </div>
       </div>

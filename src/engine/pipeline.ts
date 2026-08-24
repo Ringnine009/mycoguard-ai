@@ -1,10 +1,11 @@
 import { RiskAssessment, VisionResult } from '../types';
+import { Lang, translate } from '../i18n';
 import { formatConfidence } from './presentation';
 
 /**
  * Builds the "dual-channel" flow visualization steps shown on the result
- * page after a photo analysis:
- *   📷 视觉识别 → 性状提取 → 规则引擎 → 融合置信度
+ * page after a photo analysis (bilingual, default zh):
+ *   📷 vision → traits → rule engine → fused confidence
  */
 export interface PipelineStep {
   id: 'vision' | 'traits' | 'engine' | 'fusion';
@@ -13,7 +14,7 @@ export interface PipelineStep {
   active: boolean;
 }
 
-const CONSISTENCY_LABEL: Record<string, string> = {
+const CONSISTENCY_ZH: Record<string, string> = {
   agree: '一致',
   partial: '部分一致',
   disagree: '存在分歧',
@@ -24,6 +25,7 @@ export function buildVisionPipeline(
   vision: VisionResult,
   assessment: RiskAssessment,
   totalTraits: number,
+  lang: Lang = 'zh',
 ): PipelineStep[] {
   const visionCount = Object.keys(vision.traits).length;
   const consistency = assessment.visionConsistency ?? 'n-a';
@@ -31,26 +33,26 @@ export function buildVisionPipeline(
   return [
     {
       id: 'vision',
-      kicker: '视觉识别',
-      detail: vision.speciesGuess ?? '未能识别物种',
+      kicker: translate('视觉识别', lang),
+      detail: vision.speciesGuess ?? translate('未能识别物种', lang),
       active: true,
     },
     {
       id: 'traits',
-      kicker: '性状提取',
-      detail: `${visionCount} 项视觉性状`,
+      kicker: translate('性状提取', lang),
+      detail: `${visionCount} ${translate('项视觉性状', lang)}`,
       active: true,
     },
     {
       id: 'engine',
-      kicker: '规则引擎',
-      detail: `合并 ${totalTraits} 项性状`,
+      kicker: translate('规则引擎', lang),
+      detail: `${translate('合并', lang)} ${totalTraits} ${translate('项性状', lang)}`,
       active: true,
     },
     {
       id: 'fusion',
-      kicker: '融合置信度',
-      detail: `${formatConfidence(assessment.confidence).range} · ${CONSISTENCY_LABEL[consistency]}`,
+      kicker: translate('融合置信度', lang),
+      detail: `${formatConfidence(assessment.confidence).range} · ${translate(CONSISTENCY_ZH[consistency], lang)}`,
       active: true,
     },
   ];

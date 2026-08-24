@@ -11,11 +11,13 @@ import { ResultPanel } from './components/ResultPanel';
 import { ChatPanel } from './components/ChatPanel';
 import { StatusBadge } from './components/StatusBadge';
 import { DisclaimerBanner } from './components/disclaimer';
+import { LangProvider, useI18n } from './i18n';
 import { Camera, ListChecks, Spinner } from './components/icons';
 
 type Tab = 'manual' | 'photo';
 
-const App: React.FC = () => {
+const AppInner: React.FC = () => {
+  const { t, lang, setLang } = useI18n();
   const [traits, setTraits] = useState<MushroomTraits>({});
   const [vision, setVision] = useState<VisionResult | null>(null);
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
@@ -81,17 +83,17 @@ const App: React.FC = () => {
     } catch (err) {
       setPhotoStage('error');
       if (err instanceof OfflineError) {
-        setPhotoError('后端视觉服务未配置或不可用——已回退纯离线模式，请改用性状鉴定。');
+        setPhotoError(t('后端视觉服务未配置或不可用——已回退纯离线模式，请改用性状鉴定。'));
       } else if (err instanceof ApiError) {
-        setPhotoError(`视觉分析失败：${err.message}`);
+        setPhotoError(t('视觉分析失败：') + err.message);
       } else {
-        setPhotoError('视觉分析失败，请重试。');
+        setPhotoError(t('视觉分析失败，请重试。'));
       }
       setAssessment(null);
     } finally {
       setAnalyzing(false);
     }
-  }, [photo, traits]);
+  }, [photo, traits, t]);
 
   const clearPhoto = useCallback(() => {
     setPhoto(null);
@@ -108,10 +110,18 @@ const App: React.FC = () => {
           <div className="brand-logo">🍄</div>
           <div>
             <h1>MycoGuard</h1>
-            <p className="tagline">蘑菇安全识别助手 · 不确定性量化的风险分级</p>
+            <p className="tagline">{t('蘑菇安全识别助手 · 不确定性量化的风险分级')}</p>
           </div>
         </div>
         <div className="header-right">
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            aria-label={lang === 'zh' ? 'Switch to English' : '切换到中文'}
+          >
+            {lang === 'zh' ? 'EN' : '中文'}
+          </button>
           <StatusBadge health={health} />
         </div>
       </header>
@@ -127,7 +137,7 @@ const App: React.FC = () => {
               className={`mode-tab${tab === 'manual' ? ' active' : ''}`}
               onClick={() => setTab('manual')}
             >
-              <ListChecks size={15} /> 性状鉴定
+              <ListChecks size={15} /> {t('性状鉴定')}
             </button>
             <button
               type="button"
@@ -136,23 +146,23 @@ const App: React.FC = () => {
               className={`mode-tab${tab === 'photo' ? ' active' : ''}`}
               onClick={() => setTab('photo')}
             >
-              <Camera size={15} /> 拍照识别
+              <Camera size={15} /> {t('拍照识别')}
             </button>
           </div>
 
           {tab === 'manual' ? (
             <>
-              <div className="scenario-row" aria-label="示例场景">
-                <div className="scenario-title">示例场景（一键填充）</div>
+              <div className="scenario-row" aria-label={t('示例场景（一键填充）')}>
+                <div className="scenario-title">{t('示例场景（一键填充）')}</div>
                 {SCENARIOS.map((s) => (
                   <button
                     key={s.id}
                     type="button"
                     className="scenario-chip"
-                    title={s.description}
+                    title={t(s.description)}
                     onClick={() => applyScenario(s)}
                   >
-                    {s.label}
+                    {t(s.label)}
                   </button>
                 ))}
               </div>
@@ -165,7 +175,7 @@ const App: React.FC = () => {
           <div style={{ padding: '0 16px 16px' }}>
             {tab === 'manual' ? (
               <button type="button" className="btn primary block" disabled={filledCount < 1 || analyzing} onClick={runManual}>
-                {analyzing ? <Spinner size={15} /> : '🍄 开始分析'}
+                {analyzing ? <Spinner size={15} /> : `🍄 ${t('开始分析')}`}
               </button>
             ) : (
               <button
@@ -176,17 +186,17 @@ const App: React.FC = () => {
               >
                 {analyzing ? (
                   <>
-                    <Spinner size={15} /> 视觉分析中…
+                    <Spinner size={15} /> {t('视觉分析中…')}
                   </>
                 ) : (
-                  '📷 拍照识别'
+                  `📷 ${t('拍照识别')}`
                 )}
               </button>
             )}
             {photoError && <div className="form-error">{photoError}</div>}
             {filledCount < 3 && tab === 'manual' && (
               <div className="form-note" style={{ marginTop: 10 }}>
-                至少录入 <strong>3 项</strong> 判别性性状才能给出方向性风险判断；不足时结果将强制为「无法判断」。
+                {t('至少录入')} <strong>{t('3 项')}</strong> {t('判别性性状才能给出方向性风险判断；不足时结果将强制为「无法判断」。')}
               </div>
             )}
           </div>
@@ -201,17 +211,15 @@ const App: React.FC = () => {
           </div>
 
           {assessment ? (
-            <ResultPanel assessment={assessment} traits={traits} vision={vision} filledTraits={filledCount} />
+            <ResultPanel assessment={assessment} traits={traits} vision={vision} photoUrl={photo?.previewUrl} filledTraits={filledCount} />
           ) : (
             <div className="empty-state">
               <div className="es-icon">🍄</div>
-              <div className="es-title">等待观察数据</div>
+              <div className="es-title">{t('等待观察数据')}</div>
               <div className="es-sub">
-                {tab === 'manual'
-                  ? '在左侧选择你观察到的蘑菇性状，SVG 形态会实时更新；点击「开始分析」获得不确定性量化的风险分级。'
-                  : '上传蘑菇照片后点击「拍照识别」。识别失败或后端离线时，自动回退为纯离线规则引擎模式。'}
+                {tab === 'manual' ? t('在左侧选择你观察到的蘑菇性状，SVG 形态会实时更新；点击「开始分析」获得不确定性量化的风险分级。') : t('上传蘑菇照片后点击「拍照识别」。识别失败或后端离线时，自动回退为纯离线规则引擎模式。')}
                 <br />
-                任何结果都仅供教育参考，不构成食用建议。
+                {t('任何结果都仅供教育参考，不构成食用建议。')}
               </div>
             </div>
           )}
@@ -220,9 +228,9 @@ const App: React.FC = () => {
         {/* ---- Chat ---- */}
         <aside className="panel chat-panel">
           <div className="panel-head">
-            <span>安全知识问答</span>
+            <span>{t('安全知识问答')}</span>
             <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>
-              {health?.chat ? 'AI 增强' : '知识库规则'}
+              {health?.chat ? t('AI 增强') : t('知识库规则')}
             </span>
           </div>
           <ChatPanel chatEnabled={Boolean(health?.chat)} />
@@ -234,15 +242,21 @@ const App: React.FC = () => {
         <div className="footer-tech">
           <span>
             <span className="pulse-dot" />
-            离线规则引擎（随机森林逻辑蒸馏 · UCI Mushrooms）
+            {t('离线规则引擎（随机森林逻辑蒸馏 · UCI Mushrooms）')}
           </span>
-          <span>风险分级：低 / 中 / 高 / 无法判断</span>
-          <span>置信度区间 ∈ (0, 97%]</span>
-          <span>视觉增强：qwen-vl-plus（可选后端）</span>
+          <span>{t('风险分级：低 / 中 / 高 / 无法判断')}</span>
+          <span>{t('置信度区间 ∈ (0, 97%]')}</span>
+          <span>{t('视觉增强：qwen-vl-plus（可选后端）')}</span>
         </div>
       </footer>
     </div>
   );
 };
+
+const App: React.FC = () => (
+  <LangProvider>
+    <AppInner />
+  </LangProvider>
+);
 
 export default App;
