@@ -5,7 +5,7 @@ record first (`red → green`), plus the safety metric the project should have b
 quoting all along. Written so each item can be defended in an interview.
 
 Baseline before this work: **399 vitest / 43 pytest green**, `npm run build` green.
-After: **450 vitest / 49 pytest green**, `npm run build` green.
+After: **451 vitest / 49 pytest green**, `npm run build` green.
 
 ---
 
@@ -51,7 +51,7 @@ disagreeing vision result moved a low-risk display from 54% to **68%**.
 - `a confident visual channel never moves the evidence point estimate`
   → `expected 0.38415340909090906 to be 0.5371590909090909`
 
-`src/__tests__/resultPanelSafety.test.tsx` (new, 11 tests). Red run: **4 failed**,
+`src/__tests__/resultPanelSafety.test.tsx` (new, 12 tests). Red run: **4 failed**,
 including `does not use the success tone class anywhere in the low-risk DOM`
 (received `class="result-card top-border safe"`, `class="risk-badge safe"`,
 `class="guidance-box safe"`).

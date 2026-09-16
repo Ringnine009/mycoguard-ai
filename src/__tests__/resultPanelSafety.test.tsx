@@ -4,7 +4,7 @@ import { ResultPanel } from '../components/ResultPanel';
 import { computeRiskAssessment } from '../engine/mushroomEngine';
 import { evaluateVision } from '../engine/merge';
 import { LangProvider, translate } from '../i18n';
-import { MushroomTraits } from '../types';
+import { MushroomTraits, RiskAssessment } from '../types';
 
 /**
  * SAFETY CONTRACT — DOM level.
@@ -66,6 +66,28 @@ describe('ResultPanel — a low verdict carries no success affordance', () => {
     const html = render(LOW);
     expect(html).not.toContain('100%');
     expect(html).not.toContain('conf-scale');
+  });
+
+  it('renders a verdict that arrives without the evidence summary (no crash, no success look)', () => {
+    // `computeRiskAssessment` always fills `evidence`; this asserts the result
+    // page does not crash (or fall back to a reassuring display) if a hand-built
+    // assessment ever reaches it without one.
+    const bare = {
+      riskLevel: 'low' as const,
+      confidence: { point: 0.4, lower: 0.3, upper: 0.5 },
+      reasoning: 'r',
+      guidance: 'g',
+      ruleHits: [],
+      incomplete: false,
+    } as unknown as RiskAssessment;
+    const html = renderToString(
+      <LangProvider>
+        <ResultPanel assessment={bare} traits={LOW} filledTraits={3} />
+      </LangProvider>,
+    );
+    expect(html).toContain('证据充分度');
+    expect(html).not.toContain('shield-check');
+    expect(classes(html)).not.toContain('safe');
   });
 
   it('keeps the risk tier wording (direction) separate from the strength number', () => {

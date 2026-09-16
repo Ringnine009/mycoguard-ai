@@ -96,7 +96,12 @@ export interface RiskAssessment {
   riskLevel: RiskLevel;
   /** Evidence-strength interval — see ConfidenceInterval. Not a safety chance. */
   confidence: ConfidenceInterval;
-  /** Same number, plus the metadata that explains what it means. */
+  /**
+   * Same number, plus the metadata that explains what it means. Always populated
+   * by `computeRiskAssessment`. The result page reads it defensively anyway: a
+   * hand-built assessment must degrade to "no caveat shown yet", never to a
+   * reassuring display.
+   */
   evidence: EvidenceSummary;
   reasoning: string;
   guidance: string;

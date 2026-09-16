@@ -72,7 +72,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
   const toneVar =
     tone === 'danger' ? 'var(--danger)' : tone === 'warn' ? 'var(--warn)' : 'var(--muted-c)';
 
-  const widthNote = assessment.evidence.intervalWidened
+  const widthNote = assessment.evidence?.intervalWidened
     ? t('区间因双通道分歧加宽（证据强度不可按点估计理解）')
     : consistency === 'agree'
       ? t('区间因双通道一致收窄')
