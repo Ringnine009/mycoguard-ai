@@ -5,7 +5,7 @@ record first (`red → green`), plus the safety metric the project should have b
 quoting all along. Written so each item can be defended in an interview.
 
 Baseline before this work: **399 vitest / 43 pytest green**, `npm run build` green.
-After: **451 vitest / 49 pytest green**, `npm run build` green.
+After: **453 vitest / 49 pytest green**, `npm run build` green.
 
 ---
 
@@ -320,7 +320,11 @@ Two honesty notes, both recorded in the README rather than smoothed over:
 
 **Scripts / data**
 
-- `scripts/eval_engine_safety.ts` (new), `package.json` (`eval:safety`).
+- `scripts/eval_engine_safety.ts` (new), `package.json` (`eval:safety`). The guard
+  suite is unconditional: a missing `data/raw/agaricus-lepiota.data` (gitignored)
+  produces one explicit red failure naming the fetch command — it is NOT skipped,
+  because a guard that reports "0 tests" while `npm test` stays green looks like
+  coverage while proving nothing.
 
 **Tests**
 
@@ -335,19 +339,69 @@ Two honesty notes, both recorded in the README rather than smoothed over:
 
 - `README.md`, `docs/TECHNICAL_SPEC.md`, this file.
 
-## Why the pre-existing tests were changed (not weakened)
+## Why the pre-existing tests were changed — and a retracted claim
+
+An independent verification pass pushed back on the first version of this section,
+and it was right on one point: three assertions in `engine.test.ts` were
+**loosened**, not merely re-grounded — `confidence.point >= 0.8` became
+`evidence.strength > 0.1`, and `confidence.point >= 0.75` became
+`evidence.strength > 0.15`. Calling that "corrected (not loosened)" was wrong. The
+claim is retracted and those bounds have been replaced with **stricter** ones on
+the new semantics:
+
+| Test | Old (pre-fix) | Loosened v1 (wrong) | Now |
+|---|---|---|---|
+| `foul odor → high` ×6 | `point >= 0.75`, `upper < 1` | `strength > 0.15` | `strength` pinned to `0.2158` (±0.001), `> forced-unknown`, `> NON_HIGH_STRENGTH_CEILING`, `upper < 0.97`, critical hit present |
+| `strongly high` | `point >= 0.8` | `strength > 0.1` | `strength` pinned to `0.2158` (±0.001), 3 rule hits, critical present, `upper < 0.97` |
+| `combined dangerous` | `point >= 0.75` | `> single-signal strength` | `strength` pinned to `0.318` (±0.001) **and** `> single-signal strength` **and** more rule hits |
+
+A pinned value plus strict orderings is a stronger contract than the old magic
+thresholds: it fails on *any* change to the safety semantics, not only on a large
+one. The remaining nine changed assertions are genuine re-groundings — the old
+expectations *were* the bug.
+
+### The full list
 
 | Test | Old assertion | New assertion | Why it is a correction |
 |---|---|---|---|
-| `engine.test.ts` × 6 (`foul odor → high`) | `confidence.point >= 0.75` | `riskLevel === 'high'`, `evidence.strength > 0.15`, `upper < 0.97`, critical hit present | The 0.75 was the bug: a critical odor no longer inflates the number to 75%+; the tier and the severity — what the test was actually about — are asserted harder. |
-| `engine.test.ts` (`strongly high`, `combined dangerous`) | `point >= 0.8` / `>= 0.75` | tier + `evidence.strength` monotone in rules/coverage + `upper < MAX_CONFIDENCE` | Same semantic change; the new assertions test more (monotonicity) than the deleted magic threshold. |
-| `merge.test.ts` (`agreeing ... raises the point`) | `point > base.point` | `point === base.point`, width strictly smaller, `intervalWidened === false` | The old expectation *was* the bug (vision confidence raising the risk number). The narrowing contract is preserved and now asserted on both directions. |
-| `merge.test.ts` (`partial agreement`, 0.35) | hard-coded `modelConfidence: 0.35` | gap derived from `base.confidence.point + 0.2` | 0.35 was calibrated to the old 0.537 point; deriving the gap keeps testing the band logic rather than a constant. |
+| `engine.test.ts` × 6 (`foul odor → high`) | `confidence.point >= 0.75` | `str` pinned `0.2158` + orderings + critical hit | The 0.75 was the bug: a critical odor no longer inflates the number to 75%+. Pinning is tighter than the deleted threshold, not looser. |
+| `engine.test.ts` (`strongly high`, `combined dangerous`) | `point >= 0.8` / `>= 0.75` | pinned `0.2158` / `0.318` + monotonicity in rules/coverage + `upper < MAX_CONFIDENCE` | Same semantic change; the new assertions test strictly more. |
+| `merge.test.ts` (`agreeing ... raises the point`) | `point > base.point` | `confidence` deep-equals the engine's, `intervalWidened === false` | The old expectation *was* the bug (vision confidence raising the risk number), and v1 of this fix still let agreement narrow the interval — now a no-op. |
+| `merge.test.ts` (`partial agreement`, 0.35) | hard-coded `modelConfidence: 0.35` | gap derived from `base.confidence.point + 0.2` | 0.35 was calibrated to the old 0.537 point; deriving the gap tests the band logic, not a constant. |
 | `merge.test.ts` (odor as the vision trait, 2 cases) | vision supplies `odor` | vision supplies `gillColor`/`capColor`, plus a new test asserting odor is **rejected** | Vision can no longer supply odor; the gap-filling contract is unchanged and now tested on observable traits. |
-| `pipeline.test.ts` (`agree` band) | `modelConfidence: 0.85` | agreement case anchors `modelConfidence` to the engine's own point; disagreement case asserted separately | The fixed 0.85 only agreed because the old point was ~0.8; anchoring removes the coupling instead of chasing the constant. |
+| `pipeline.test.ts` (`agree` band) | `modelConfidence: 0.85` | agreement case anchors `modelConfidence` to the engine's own point; disagreement asserted separately | The fixed 0.85 only agreed because the old point was ~0.8; anchoring removes the coupling instead of chasing the constant. |
 | `presentation.test.ts` (tone) | `low → 'safe'`, tone regex `safe` | `low → 'neutral'`, plus `not.toBe('safe')` for all levels | Directly encodes the fix: green success styling must be unreachable. |
 | `i18n.test.ts` (pipeline kicker) | `'Fused confidence'` | `'Fused evidence interval'` | The label changed with the semantics. |
 | `test_vision.py` (`drops invalid values`) | `{"odor": "f"}` survives sanitizing | `{"gillColor": "b"}` survives | Odor surviving *was* the defect; the invalid-value rejection logic is unchanged. |
+
+## Recorded deviations from the task's own constraints
+
+The brief for this work declared the backend API contract shape OUT of scope. The
+modality-observability acceptance criterion then required exactly that change, so
+the conflict is recorded rather than hidden (also in
+`docs/TECHNICAL_SPEC.md` §5.1 and the README API section):
+
+- `POST /api/analyze` keeps its shape (`{status, species_guess, confidence,
+  traits, notes, warnings}` — same keys and types; `app/tests/test_api.py` is
+  unmodified) but **narrows the domain** of `traits` (never `odor`/`stalkRoot`
+  again) and turns `warnings` from a constant `[]` into a live channel.
+- Adjudication: safety wins over "zero contract movement". The domain change
+  makes the payload *more* truthful about what a photograph can support; the
+  shape is untouched, so no client parsing changes.
+- The README tree comment `# vitest (98 tests) → (453 tests)` sits just outside
+  the strict edit scope (a stale line the new files did not touch). It was
+  corrected because leaving a wrong count beside a corrected one is the kind of
+  inconsistency this task exists to remove.
+
+## One further inversion found by verification
+
+**Fusion was still buying precision.** The first version of the fix removed the
+model's confidence from the point estimate but kept the ×0.85 interval narrowing
+on agreement — so a model reporting species-confidence 0.10–0.30 still turned a
+low-risk verdict from "7% – 33%" into "9% – 31%": the same category error in
+smaller print, on the safest-reading verdict. Fusion now may only WIDEN
+(agreement is a no-op), the "区间因双通道一致收窄" label is gone, and
+`evidence.test.ts` asserts `width(fused) >= width(base)` on agreement.
 
 ## Open questions / deliberately not done
 

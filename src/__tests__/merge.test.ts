@@ -99,18 +99,18 @@ describe('fuseVisionConfidence — dual-channel confidence fusion', () => {
     expect(r.confidence).toEqual(computeRiskAssessment({ odor: 'a', capShape: 'x', capColor: 'n' }).confidence);
   });
 
-  it('agreeing confident vision narrows the interval but never moves the point', () => {
+  it('agreeing confident vision leaves the interval and the point untouched', () => {
     const traits = { odor: 'f', capShape: 'x', capColor: 'n' };
     const base = computeRiskAssessment(traits);
     // Semantic change (v3): the vision model's SPECIES confidence used to be
     // weighted into the risk number (`0.65·engine + 0.35·model`), a category
     // error that made a verdict look more certain the more confident the model
-    // was. Fusion now only scales the interval width.
+    // was. It then narrowed the interval on agreement — still letting an
+    // optional, unobservable claim buy precision. Fusion now may only WIDEN.
     const r = evaluateVision(traits, vision({ modelConfidence: base.confidence.point }));
     expect(r.visionConsistency).toBe('agree');
-    expect(r.confidence.point).toBe(base.confidence.point);
+    expect(r.confidence).toEqual(base.confidence);
     expect(r.evidence.strength).toBe(base.evidence.strength);
-    expect(r.confidence.upper - r.confidence.lower).toBeLessThan(base.confidence.upper - base.confidence.lower);
     expect(r.evidence.intervalWidened).toBe(false);
     expect(r.confidence.upper).toBeLessThanOrEqual(0.97);
   });

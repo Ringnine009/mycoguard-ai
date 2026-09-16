@@ -53,7 +53,7 @@ something you could actually put on GitHub.
 | Photo flow UX | frontend | live stages (preparing → analyzing → traits extracted), **"vision" badges** on vision-derived traits, dual-channel pipeline strip, bundled **sample photos** (`samples/`, try without a camera) |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (451) + pytest (49) | see [Testing](#testing) |
+| Tests | vitest (453) + pytest (49) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -144,6 +144,15 @@ built `dist/` at `http://localhost:8000`.
 | `POST` | `/api/analyze` | multipart `file` (jpeg/png/webp ≤ 8 MB) | `{status, species_guess, confidence, traits, notes, warnings}` |
 | `POST` | `/api/chat` | `{"question": "..."}` | `{answer, mode: rule\|llm\|fallback, source?, matched}` |
 
+**Contract note (v3, deliberate change).** The response *shape* is unchanged —
+same keys, same types — but the domain of two fields is narrower than before:
+`traits` can no longer contain `odor` or `stalkRoot` (a photograph cannot
+establish either — see "Uncertainty quantification" §6), and `warnings` is now a
+live channel (it used to be always `[]`) reporting any non-observable trait the
+model claimed and the sanitizer discarded. Both changes are required by the
+modality-observability work and are pinned by `app/tests/test_vision_modality.py`
+and `src/__tests__/modality.test.ts`.
+
 Errors: `413` too large · `415` not an image · `503` vision not configured
 (offline) · `502` upstream LLM failure.
 
@@ -220,13 +229,15 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
    risk. Dropped traits are surfaced in the result page instead of being
    silently ignored. Manual entry is unaffected: a person at the specimen can
    smell it and can dig it up.
-7. **Evidence fusion in photo mode widens or narrows the interval only.** The
-   model's self-reported confidence is a confidence in a *species guess*, so
-   it is never weighted into the risk/evidence number: `gap = |engine.point −
-   model|` `< 0.12 → agree (interval ×0.85)`, `0.12–0.30 → partial (×1.0)`,
-   `> 0.30 → disagree (×1.2)`. A confident model can never rescue an "unknown"
-   verdict, and never changes the tier. A disagreement is marked on screen
-   ("区间因双通道分歧加宽").
+7. **Evidence fusion in photo mode may only WIDEN the interval.** The model's
+   self-reported confidence is a confidence in a *species guess*, so it is never
+   weighted into the risk/evidence number: `gap = |engine.point − model|`
+   `< 0.12 → agree (interval unchanged)`, `0.12–0.30 → partial (unchanged)`,
+   `> 0.30 → disagree (×1.2, widened; flagged on screen as 区间因双通道分歧加宽)`.
+   Widening is the only admissible direction: an optional model answering a
+   different question has no authority to make any verdict look *more* precise,
+   so agreement is a no-op. A confident model can never rescue an "unknown"
+   verdict, never changes the tier, and never moves the point estimate.
 8. **One-click example scenarios.** Five teaching presets (大青褶伞 → high,
    鸡油菌形态 → low, 毒蝇伞外观 → unknown, 混合信号 → medium, 信息不足 → unknown)
    fill the trait form in one click — no 22-dropdown barrier for demos.
@@ -249,7 +260,7 @@ caveat — see `docs/upgrade-notes.md`.
 ## Testing
 
 ```bash
-npx vitest run          # frontend (451 tests): engine grading, forced-unknown,
+npx vitest run          # frontend (453 tests): engine grading, forced-unknown,
                         # evidence-strength/direction separation, low-verdict
                         # DOM safety (no success styling), modality observability,
                         # UCI safety replay + regression guard, scenarios,
@@ -291,7 +302,7 @@ mycoguard/
 │   ├── components/           # canvas, trait panel, scenario chips, photo
 │   │                         # capture, result, chat, disclaimer, icons
 │   ├── styles/global.css     # light design system (mobile-ready)
-│   └── __tests__/            # vitest (451 tests)
+│   └── __tests__/            # vitest (453 tests)
 ├── samples/                  # bundled demo photos for the "试用样例" button
 ├── scripts/
 │   ├── analyze_dataset.py    # UCI RF distillation (evidence script)
@@ -371,7 +382,7 @@ mycoguard/
   内置样例照片一键体验。
 - **中英双语（v5）**：右上角 EN / 中文 一键切换、即时生效；风险分级、专家解读、
   规则文案、免责声明与全部界面标签均已双语化（字典 `src/i18n.tsx`）。
-- **测试**：vitest 451 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
+- **测试**：vitest 453 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
   用真实 UCI 数据回放引擎的安全回归护栏（假安全数必须为 0，指标退化即变红）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端

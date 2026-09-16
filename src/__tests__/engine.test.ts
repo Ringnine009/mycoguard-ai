@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { computeRiskAssessment, MIN_TRAITS, MAX_CONFIDENCE } from '../engine/mushroomEngine';
+import {
+  computeRiskAssessment,
+  MIN_TRAITS,
+  MAX_CONFIDENCE,
+  NON_HIGH_STRENGTH_CEILING,
+} from '../engine/mushroomEngine';
 import { MushroomTraits } from '../types';
 
 /**
@@ -55,13 +60,15 @@ describe('computeRiskAssessment — data-grounded rules (UCI distillation v2)', 
   it('spore green + buff gills + narrow gills → strongly high', () => {
     const r = computeRiskAssessment({ sporePrintColor: 'r', gillColor: 'b', gillSize: 'n' });
     expect(r.riskLevel).toBe('high');
-    // Three critical/warning signals on only three observed traits: the tier is
-    // decisive (see GUIDANCE.high) while the evidence strength stays modest —
-    // and the interval must not reach certainty.
-    expect(r.evidence.strength).toBeGreaterThan(0.1);
-    expect(r.confidence.upper).toBeLessThan(MAX_CONFIDENCE);
-    expect(r.ruleHits.some((h) => h.severity === 'critical')).toBe(true);
+    // The v3 equivalent of the old `point >= 0.8` bound: PIN the exact evidence
+    // strength instead of restating the obsolete one (which no longer holds by
+    // design — critical signals no longer inflate the number to 75%+). The
+    // value below is the measured output of the shipped formula; a change to it
+    // is a change to the safety contract and must be deliberate.
+    expect(r.evidence.strength).toBeCloseTo(0.2158, 3);
     expect(r.ruleHits.length).toBe(3);
+    expect(r.ruleHits.some((h) => h.severity === 'critical')).toBe(true);
+    expect(r.confidence.upper).toBeLessThan(MAX_CONFIDENCE);
   });
 });
 
@@ -105,17 +112,20 @@ describe('computeRiskAssessment — high-risk signals', () => {
   const neutral = { capShape: 'x', capColor: 'n' } as const;
 
   /**
-   * Old assertion here: `confidence.point >= 0.75`. That was the bug surfaced
-   * in the audit — a critical odor on three observed traits rendered "75%+"
-   * next to a green badge, readable as a safety score. The critical signal must
-   * still be decisive (high tier, critical severity, real evidence) but it may
-   * no longer inflate the number: it now adds a fixed +0.15 evidence bonus on
-   * top of coverage, landing near 0.22 for this input.
+   * Old assertions here were `confidence.point >= 0.75` (and `upper < 1`). Those
+   * encoded the bug surfaced in the audit: a critical odor on three observed
+   * traits rendered "75%+" beside a green badge, readable as a safety score. The
+   * critical signal must still be decisive, so the replacement bounds are
+   * STRICTER than a floor: the exact pinned strength, plus strict orderings
+   * against the forced-unknown floor and the non-high ceiling.
    */
   it.each(FOUL_ODORS.map((o) => [o]))('foul/strong odor %s → high risk, interval upper < 1', (odor) => {
     const r = computeRiskAssessment({ odor, ...neutral });
     expect(r.riskLevel).toBe('high');
-    expect(r.evidence.strength).toBeGreaterThan(0.15); // real, non-trivial evidence
+    expect(r.evidence.strength).toBeCloseTo(0.2158, 3);
+    // Discriminating power, stated as an ordering rather than a threshold.
+    expect(r.evidence.strength).toBeGreaterThan(computeRiskAssessment({ odor }).evidence.strength);
+    expect(r.evidence.strength).toBeGreaterThan(NON_HIGH_STRENGTH_CEILING);
     expect(r.confidence.upper).toBeLessThan(MAX_CONFIDENCE);
     expect(r.ruleHits.some((h) => h.severity === 'critical')).toBe(true);
   });
@@ -126,12 +136,13 @@ describe('computeRiskAssessment — high-risk signals', () => {
     expect(r.ruleHits.some((h) => h.id === 'spore-green')).toBe(true);
   });
 
-  it('combined dangerous traits → high risk with more evidence than a single signal', () => {
+  it('combined dangerous traits → more evidence, strictly ordered above a single signal', () => {
     const single = computeRiskAssessment({ odor: 'f', ...neutral });
     const r = computeRiskAssessment({
       odor: 'p', sporePrintColor: 'r', gillSize: 'n', bruises: 'f',
     });
     expect(r.riskLevel).toBe('high');
+    expect(r.evidence.strength).toBeCloseTo(0.318, 3);
     expect(r.evidence.strength).toBeGreaterThan(single.evidence.strength);
     expect(r.evidence.ruleHits).toBeGreaterThan(single.evidence.ruleHits);
   });

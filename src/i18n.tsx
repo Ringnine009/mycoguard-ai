@@ -144,7 +144,6 @@ const TRANSLATIONS: Record<string, string> = {
     'No strong risk signal found — that does not mean it is safe to eat.',
   '区间因双通道分歧加宽（证据强度不可按点估计理解）':
     'Interval widened by channel disagreement (do not read the point estimate as strength).',
-  '区间因双通道一致收窄': 'Interval narrowed by channel agreement',
   '双通道分析链路': 'Dual-channel pipeline',
   '视觉识别': 'Vision',
   '性状提取': 'Traits',

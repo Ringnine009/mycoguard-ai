@@ -236,13 +236,21 @@ describe('vision fusion may not manufacture certainty', () => {
     }
   });
 
-  it('an agreeing visual channel may narrow the interval but never raise the point', () => {
-    // LOW scores ≈0.15, so a visual channel at 0.15 is "agreeing" by the gap rule.
+  it('an agreeing visual channel may not tighten the interval at all', () => {
+    // The visual channel is OPTIONAL and its confidence is a confidence in a
+    // SPECIES guess — a claim about a different question. It therefore has no
+    // authority to make any verdict look more precise: agreement may leave the
+    // interval alone, disagreement may widen it. The pre-fix version narrowed
+    // by ×0.85 on agreement, which let a model's species confidence make a
+    // low-risk verdict render "9% – 31%" instead of "7% – 33%" — measurably
+    // more certain, on the safest-reading verdict.
     const fused = evaluateVision(LOW, vision(0.15));
     const width = (a: RiskAssessment) => a.confidence.upper - a.confidence.lower;
     expect(fused.visionConsistency).toBe('agree');
-    expect(width(fused)).toBeLessThanOrEqual(width(base));
-    expect(fused.confidence.point).toBeLessThanOrEqual(base.confidence.point);
+    expect(width(fused)).toBeGreaterThanOrEqual(width(base));
+    expect(fused.confidence.lower).toBeLessThanOrEqual(base.confidence.lower);
+    expect(fused.confidence.upper).toBeGreaterThanOrEqual(base.confidence.upper);
+    expect(fused.confidence.point).toBe(base.confidence.point);
     expect(fused.evidence.intervalWidened ?? false).toBe(false);
   });
 

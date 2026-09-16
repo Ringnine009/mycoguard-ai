@@ -72,11 +72,11 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
   const toneVar =
     tone === 'danger' ? 'var(--danger)' : tone === 'warn' ? 'var(--warn)' : 'var(--muted-c)';
 
+  // Only widening is announced. Agreement deliberately has no note: the visual
+  // channel may not tighten the interval, so there is nothing to claim.
   const widthNote = assessment.evidence?.intervalWidened
     ? t('区间因双通道分歧加宽（证据强度不可按点估计理解）')
-    : consistency === 'agree'
-      ? t('区间因双通道一致收窄')
-      : null;
+    : null;
 
   return (
     <div className="result-area">

@@ -46,20 +46,26 @@ export function mergeTraits(
 /**
  * Dual-channel evidence fusion (photo mode).
  *
- * SAFETY CONTRACT (do not weaken): the visual channel may only change the
- * WIDTH of the evidence interval — never the risk tier, never the strength
- * point estimate. The vision model's self-reported `modelConfidence` is a
- * confidence in a SPECIES guess; weighting it into the risk/evidence number
- * was a category error (it made a low-risk verdict look *more* certain the
- * more confident the model was, whatever the model actually saw).
+ * SAFETY CONTRACT (do not weaken): the visual channel may only WIDEN the
+ * evidence interval. It never changes the risk tier, never moves the strength
+ * point estimate, and never makes any verdict look more precise.
  *
- *   gap = |engine.point − modelConfidence|
- *     < 0.12  → agree    (channels corroborate → narrow ×0.85)
- *     0.12–0.30 → partial
- *     > 0.30  → disagree (channels conflict → widen ×1.2)
+ * Why widening only: the model's self-reported confidence is a confidence in a
+ * SPECIES guess — an answer to a different question than "how well observed is
+ * this specimen". Weighting it into the risk number was the original category
+ * error; letting an AGREEING channel narrow the interval by ×0.85 was the same
+ * error in smaller print (measured: a low-risk verdict rendered "7% – 33%" and
+ * became "9% – 31%" as soon as a model reported confidence 0.10–0.30). An
+ * optional, unobservable claim must not buy precision, so agreement is now a
+ * no-op and only disagreement widens.
+ *
+ *   gap = |engine.strength − modelConfidence|
+ *     < 0.12  → agree    (channels corroborate → interval unchanged)
+ *     0.12–0.30 → partial (interval unchanged)
+ *     > 0.30  → disagree (channels conflict → widen ×1.2, and say so on screen)
  *
  *   point'  = engine.point                      (unchanged, by construction)
- *   margin' = (engine.upper − engine.point) × factor
+ *   margin' = (engine.upper − engine.point) × factor, factor ∈ {1, 1.2}
  *   interval' = [point' − margin', point' + margin'] ⊂ (0, 0.97]
  *
  * Edge cases: no vision → untouched; modelConfidence 0 (nothing seen) →
@@ -79,13 +85,10 @@ export function fuseVisionConfidence(
   const consistency: VisionConsistency =
     gap < 0.12 ? 'agree' : gap > 0.3 ? 'disagree' : 'partial';
 
-  const factor = consistency === 'agree' ? 0.85 : consistency === 'disagree' ? 1.2 : 1.0;
-  // The point estimate is the engine's evidence strength and is NOT moved:
-  // a photo is an extra observation channel, not extra certainty.
+  // Widening is the only admissible direction: 1.0 (unchanged) or 1.2 (wider).
+  const factor = consistency === 'disagree' ? 1.2 : 1;
   const point = base.confidence.point;
   const margin = Math.max(base.confidence.upper - base.confidence.point, 0) * factor;
-  // Same construction as the engine: a half-width clamped only against the
-  // (0, 0.97] bounds, so narrower evidence can never look wider.
   const lower = Math.max(point - margin, 0.02);
   const upper = Math.min(point + margin, MAX_CONFIDENCE);
 

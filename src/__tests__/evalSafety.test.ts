@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import {
   runReplay,
   type BaselineMetrics,
   type ReplayMetrics,
+  type UciRow,
 } from '../../scripts/eval_engine_safety';
 
 /**
@@ -19,7 +20,10 @@ import {
  * accuracy (that dataset is near-linearly separable, so 100% carries almost no
  * information). It is this: replayed against all 8,124 UCI rows, the rule
  * engine classified 0 of the 3,916 poisonous specimens as low risk, at the
- * cost of an 8.79% false-alarm rate and 95.25% binary accuracy. One single
+ * cost of an 8.79% false-alarm rate and 95.45% binary accuracy under the strict
+ * convention (only a `high` verdict counts as an alarm; the audit reported
+ * 95.25% under a slightly different convention — both conventions are printed
+ * and pinned below). One single
  * "safe" verdict on the 3,916 poisonous rows would be a safety regression.
  *
  * This suite recomputes the metric from the raw dataset with the real engine,
@@ -32,10 +36,42 @@ const repoRoot = resolve(here, '../..');
 const DATA = resolve(repoRoot, 'data/raw/agaricus-lepiota.data');
 const ARTIFACT = resolve(repoRoot, 'data/raw/engine_safety_report.json');
 
-const describeWithData = existsSync(DATA) ? describe : describe.skip;
+/**
+ * The dataset is gitignored (data/raw/), so a clean checkout will not have it.
+ * A MISSING FIXTURE MUST BE A LOUD FAILURE, NEVER A SILENT SKIP: the spec for
+ * this work says so explicitly, and a guard that quietly reports "0 tests" while
+ * `npm test` stays green is worse than no guard — it looks like coverage.
+ *
+ * The file is therefore read INSIDE a test (not at collection time), so an
+ * absent dataset produces one clear red "dataset is missing" failure instead of
+ * an ENOENT collection crash that reports "no tests". `npm run eval:safety` also
+ * exits 1 with the fetch command rather than emitting zeros.
+ */
+const DATASET_PRESENT = existsSync(DATA);
+const MISSING_FIXTURE_HELP =
+  `missing ${DATA}\n` +
+  'The 0/3916 false-safe guard cannot run without it and must not be skipped.\n' +
+  'Fetch it once (gitignored, ~360 KB):\n' +
+  '  .venv\\Scripts\\python scripts/analyze_dataset.py --download\n' +
+  'or: curl -o data/raw/agaricus-lepiota.data ' +
+  'https://archive.ics.uci.edu/ml/machine-learning-databases/mushroom/agaricus-lepiota.data';
+
+describe('safety-metric fixture availability', () => {
+  it('the UCI dataset is present (the safety guard cannot be skipped)', () => {
+    expect(DATASET_PRESENT, MISSING_FIXTURE_HELP).toBe(true);
+  });
+});
+
+const describeWithData = describe;
+let rows: UciRow[] = [];
 
 describeWithData('engine safety replay — UCI Mushrooms (8,124 rows)', () => {
-  const rows = loadUciRows(readFileSync(DATA, 'utf8'));
+  // Read here rather than at module scope: the failure then reads as
+  // "dataset is missing", not as an uninterpretable collection error.
+  beforeAll(() => {
+    if (!DATASET_PRESENT) throw new Error(MISSING_FIXTURE_HELP);
+    rows = loadUciRows(readFileSync(DATA, 'utf8'));
+  });
 
   it('loads the full dataset with the documented class balance', () => {
     expect(rows.length).toBe(8124);
@@ -129,7 +165,14 @@ describeWithData('engine safety replay — UCI Mushrooms (8,124 rows)', () => {
 });
 
 describe('the guard is not vacuous — a degraded engine fails the metric', () => {
-  const rows = loadUciRows(readFileSync(DATA, 'utf8')).slice(0, 400);
+  // 400 rows are enough to expose every degradation below. Loaded in beforeAll
+  // for the same reason as the replay suite: a missing fixture must surface as
+  // one clear failure, not as a collection crash that reports "no tests".
+  let rows: UciRow[] = [];
+  beforeAll(() => {
+    if (!DATASET_PRESENT) throw new Error(MISSING_FIXTURE_HELP);
+    rows = loadUciRows(readFileSync(DATA, 'utf8')).slice(0, 400);
+  });
 
   it('an engine that never raises a risk signal produces false-safe rows', () => {
     // Simulates the exact failure mode the metric exists to catch: every

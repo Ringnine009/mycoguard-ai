@@ -155,12 +155,19 @@ describe('i18n — the new safety labels are translated, not silently dropped', 
       '该数字表示证据充分度，不是安全概率，也不是可食用的可能性。',
       '未发现强风险信号——这不等于可以食用。',
       '区间因双通道分歧加宽（证据强度不可按点估计理解）',
-      '区间因双通道一致收窄',
       '证据充分度区间 ∈ (0, 97%]（非安全概率）',
     ]) {
       const en = translate(zh, 'en');
       expect(en, `missing EN translation for ${zh}`).not.toBe(zh);
       expect(en.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('no UI string promises that the visual channel tightens the interval', () => {
+    // Fusion may only widen. A leftover "narrowed by agreement" label would be
+    // the exact claim the interval may no longer make.
+    for (const zh of ['区间因双通道一致收窄', '一致收窄']) {
+      expect(translate(zh, 'en')).toBe(zh); // absent from the dictionary
     }
   });
 
