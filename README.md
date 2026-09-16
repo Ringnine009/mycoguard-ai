@@ -48,12 +48,12 @@ something you could actually put on GitHub.
 | **Bilingual UI (zh/EN)** | `src/i18n.tsx` | one-click toggle, instant switch; risk tiers, expert narrative, rules, disclaimers, all labels translated |
 | Offline rule engine | `src/engine/mushroomEngine.ts` | weights distilled from UCI data |
 | Uncertainty grading | engine | low / medium / high / **unknown** (forced when input < 3 traits) |
-| Confidence **interval** | engine + UI | `(0, 0.97]`, never 100% |
-| Photo identification | `app/` FastAPI → qwen-vl-plus | base64 proxied; keys never in the browser |
+| Evidence-strength **interval** | engine + UI | `(0, 0.97]`, never 100%, explicitly **not** a safety probability |
+| Photo identification | `app/` FastAPI → qwen-vl-plus | base64 proxied; keys never in the browser; **only traits a photo can show** (odor / stalk root rejected) |
 | Photo flow UX | frontend | live stages (preparing → analyzing → traits extracted), **"vision" badges** on vision-derived traits, dual-channel pipeline strip, bundled **sample photos** (`samples/`, try without a camera) |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (399) + pytest (43) | see [Testing](#testing) |
+| Tests | vitest (443) + pytest (49) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -61,7 +61,7 @@ something you could actually put on GitHub.
 ## Screenshots
 
 ![Manual trait mode with the v4 illustrated SVG renderer](docs/screenshots/screenshot-1-landing.png)
-![High-risk result: confidence interval, rule hits, offline expert narrative, disclaimer](docs/screenshots/screenshot-2-high-risk-result.png)
+![High-risk result: evidence-strength interval, rule hits, offline expert narrative, disclaimer](docs/screenshots/screenshot-2-high-risk-result.png)
 ![Photo identification mode with sample-photo entry](docs/screenshots/screenshot-3-photo-mode.png)
 ![Bundled sample photo loaded into the photo mode](docs/screenshots/screenshot-4-photo-sample.png)
 
@@ -155,22 +155,50 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
    `low / medium / high / unknown`. The words "edible" / "poisonous" never
    appear in engine output (unit-tested).
 2. **Forced unknown.** Fewer than **3** traits — or 3+ traits with **no
-   discriminative power** — forces `unknown` with a low-confidence interval,
-   even if a dangerous signal was observed. Insufficient evidence *is* a
-   safety signal.
-3. **Confidence interval.** Confidence = `base(0.40) + richness(0.30·n/22) +
-   logic-certainty(0.22·min(1,|Δscore|/8))`, clamped to `(0, 0.97]`; interval
-   width shrinks as evidence accumulates; critical signals raise the floor
-   to 0.80 but never to certainty.
+   discriminative power** — forces `unknown`, even if a dangerous signal was
+   observed. Insufficient evidence *is* a safety signal.
+3. **Direction and strength are separate.** The risk tier carries the
+   *direction*; the number next to it is **evidence strength** — how well
+   observed the specimen is — and is labelled as such in the UI (zh + EN). It
+   is deliberately **not** a probability that the mushroom is safe.
+   `evidenceStrength = 0.5·coverage^1.2 + 0.25·rule-support + 0.10·conflict
+   + 0.15·critical`, clamped to `(0, 0.97]`, where `coverage` is observed
+   traits / 22. Neither the sign nor the size of the risk/safety score
+   difference enters it, so a `low` verdict can never look better-evidenced
+   than a `high` one (regression-tested in `src/__tests__/evidence.test.ts`).
+   *Fixed in v3: the old point estimate used `Math.abs(Δscore)`, so it grew
+   with strongly SAFE evidence too — a 4-trait low-risk verdict rendered
+   "54%" for `{odor: a}`, "72%" for a 7-trait anchor set and "92%" for a fully
+   beside a 0–100% scale.*
 4. **Explainability.** Every verdict lists the rules that fired, with
    severity (`info / warning / critical`) and plain-language details, plus a
    deterministic **offline expert narrative** (no API needed) that names the
-   observed traits and signals — a strict upgrade of the old Gemini call.
+   observed traits and signals.
 5. **Statistical grounding (real numbers).** Weights v2 come from running
    `scripts/analyze_dataset.py` on the actual 8,124-row UCI dataset
-   (`distilled_rules.json` is committed):
-   - Random Forest held-out accuracy **100.00%** (test n=1625) — an honest
-     property of this *teaching* dataset, not a claim about field capability.
+   (`distilled_rules.json` is committed), and the engine itself is replayed
+   over all 8,124 rows by `npm run eval:safety`
+   (`scripts/eval_engine_safety.ts` → `data/raw/engine_safety_report.json`):
+   - **The headline number: 0 / 3,916 false-safe.** Of the 3,916 poisonous
+     specimens in the dataset, the rule engine graded **none** as low risk —
+     and none as `unknown` either. That is the property worth quoting: on this
+     dataset the engine never issued a "leans safe" verdict for a poisonous
+     mushroom.
+   - **Its cost, stated honestly: 370 / 4,208 (8.79%)** edible specimens were
+     graded `high` (false alarm), giving **95.45%** binary accuracy. Counting
+     `medium` as an alarm too — which is what the UI shows — 71.86% of edible
+     specimens get a warning tone at 62.78% accuracy. The engine buys its
+     safety with over-warning, not with discrimination.
+   - **A one-column baseline beats it on accuracy.** A plain lookup on `odor`
+     alone (`c f m p s y` → alarm) scores **98.52%** accuracy with no false
+     alarms at all — but misses **120 / 3,916 (3.06%)** poisonous specimens,
+     i.e. it has a *worse* false-safe rate. This is the honest trade-off: the
+     engine trades accuracy for a zero false-safe rate.
+   - **Footnote (near-worthless number):** Random Forest held-out accuracy was
+     **100.00%** (test n=1625). This dataset is near-linearly separable, so
+     that figure is achieved by essentially any model and carries almost no
+     information — it is *not* evidence of field capability, and it is quoted
+     here only because the committed `distilled_rules.json` records it.
    - Gini importance top-5: `odor 0.161 · gill-color 0.112 · gill-size 0.111 ·
      spore-print-color 0.093 · ring-type 0.070`.
    - 100%-purity branches: odors `c f m p s y` → poisonous (n=36…2160) and
@@ -178,18 +206,23 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
      gill-color `b` → poisonous (n=1728) / `e o` → edible; ring-type `l` →
      poisonous (n=1296); population `a n` → edible (n=384/400); stalk-root
      `r` → edible (n=192) — each mirrored as a rule with its support count.
-   - Fixes found by the data: `gill-color` and `ring-type` were top-5 traits
-     but had **zero weight** in the original engine; both now contribute.
-   These are **dataset associations, not biological laws**.
-6. **Dual-channel confidence fusion (photo mode).** The vision model's
-   self-reported confidence is treated as the *visual channel's reliability*
-   and fused into the final interval:
-   `point' = 0.65·engine + 0.35·model`; agreement
-   `|engine.point − model|` `< 0.12 → agree (interval ×0.85)`,
-   `0.12–0.30 → partial (×1.0)`, `> 0.30 → disagree (×1.2)`; a confident
-   model can never rescue an "unknown" verdict. The result page shows a
-   consistency chip (`一致 / 部分一致 / 存在分歧 / 未提供有效信息`).
-7. **One-click example scenarios.** Five teaching presets (大青褶伞 → high,
+   - These are **dataset associations, not biological laws**.
+6. **The photo channel only sees what a photo can show.** `odor` (olfaction)
+   and `stalk-root` (underground, only exposed by uprooting) are removed from
+   the vision model's code table *and* rejected at the sanitizer, because a
+   hallucinated "almond odor" is a 6.0-weight critical risk rule and a
+   3.5-weight safety anchor at once — enough to push a verdict towards low
+   risk. Dropped traits are surfaced in the result page instead of being
+   silently ignored. Manual entry is unaffected: a person at the specimen can
+   smell it and can dig it up.
+7. **Evidence fusion in photo mode widens or narrows the interval only.** The
+   model's self-reported confidence is a confidence in a *species guess*, so
+   it is never weighted into the risk/evidence number: `gap = |engine.point −
+   model|` `< 0.12 → agree (interval ×0.85)`, `0.12–0.30 → partial (×1.0)`,
+   `> 0.30 → disagree (×1.2)`. A confident model can never rescue an "unknown"
+   verdict, and never changes the tier. A disagreement is marked on screen
+   ("区间因双通道分歧加宽").
+8. **One-click example scenarios.** Five teaching presets (大青褶伞 → high,
    鸡油菌形态 → low, 毒蝇伞外观 → unknown, 混合信号 → medium, 信息不足 → unknown)
    fill the trait form in one click — no 22-dropdown barrier for demos.
 
@@ -197,26 +230,34 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
 
 | Level | Meaning | Guidance flavor |
 |---|---|---|
-| `low` | observed traits statistically lean safe | still *not* a dietary recommendation |
+| `low` | no strong risk signal found — **not** an edible verdict | still *not* a dietary recommendation |
 | `medium` | mixed / conflicting signals | add key traits or ask an expert |
 | `high` | strong risk signals fired | do **not** eat; treat as worst case |
 | `unknown` | insufficient evidence | do **not** eat; gather more data |
+
+A `low` verdict is rendered neutrally (no green success styling, no check
+icon) with an explicit "this is evidence strength, not a safety probability"
+caveat — see `docs/upgrade-notes.md`.
 
 ---
 
 ## Testing
 
 ```bash
-npx vitest run          # frontend (98 tests): engine grading, forced-unknown,
-                        # confidence intervals, data-grounded rules, scenarios,
-                        # confidence fusion, expert narrative, no-absolute-
-                        # language, disclaimer presence, constants integrity,
-                        # backend client (mocked fetch), presentation helpers
+npx vitest run          # frontend (443 tests): engine grading, forced-unknown,
+                        # evidence-strength/direction separation, low-verdict
+                        # DOM safety (no success styling), modality observability,
+                        # UCI safety replay + regression guard, scenarios,
+                        # interval fusion, expert narrative, no-absolute-language,
+                        # disclaimer presence, constants integrity, backend client
+                        # (mocked fetch), presentation helpers
 .venv\Scripts\python -m pytest app/tests -q
-                        # backend (40 tests): settings/BOM parsing, KB retrieval,
-                        # chat rule/llm/fallback, vision parse+sanitize, API
-                        # layer with injected fakes (no network)
+                        # backend (49 tests): settings/BOM parsing, KB retrieval,
+                        # chat rule/llm/fallback, vision parse+sanitize, vision
+                        # modality whitelist, API layer with injected fakes
 .venv\Scripts\python scripts/scan_secrets.py   # pre-commit credential scan
+npm run eval:safety     # replay the engine over all 8,124 UCI rows and print
+                        # false-safe / false-alarm / accuracy / odor baseline
 ```
 
 All LLM calls in tests are mocked (httpx `MockTransport` / injected fakes) —
@@ -237,7 +278,7 @@ mycoguard/
 │   │   ├── knowledge.py      # keyword retrieval over curated KB
 │   │   └── chat.py           # rule-first answer, optional LLM grounding
 │   ├── knowledge/entries.py  # 26 curated public-commonsense entries
-│   └── tests/                # pytest (40 tests)
+│   └── tests/                # pytest (49 tests)
 ├── src/                      # React 19 + TS + Vite frontend
 │   ├── engine/               # mushroomEngine.ts, merge.ts (fusion),
 │   │                         # scenarios.ts, expert.ts, presentation.ts
@@ -245,11 +286,15 @@ mycoguard/
 │   ├── components/           # canvas, trait panel, scenario chips, photo
 │   │                         # capture, result, chat, disclaimer, icons
 │   ├── styles/global.css     # light design system (mobile-ready)
-│   └── __tests__/            # vitest (98 tests)
+│   └── __tests__/            # vitest (443 tests)
 ├── samples/                  # bundled demo photos for the "试用样例" button
 ├── scripts/
 │   ├── analyze_dataset.py    # UCI RF distillation (evidence script)
+│   ├── eval_engine_safety.ts # UCI safety replay: false-safe / false-alarm /
+│   │                         # accuracy / odor baseline  (npm run eval:safety)
 │   └── scan_secrets.py       # pre-commit secret scanner
+├── data/raw/                 # gitignored: agaricus-lepiota.data + engine_safety_report.json
+├── docs/upgrade-notes.md     # the v3 safety upgrade, problem → test → fix → number
 ├── distilled_rules.json      # generated evidence (committed)
 ├── .env.example  ·  LICENSE (MIT)  ·  README.md
 ```
@@ -281,19 +326,34 @@ mycoguard/
 
 - **离线优先**：22 性状选择器 + SVG 实时形态渲染 + 规则引擎纯前端离线可用；
   后端只是可选的"在线增强"。
-- **不确定性量化**：风险分级为 **低 / 中 / 高 / 无法判断**，置信度以**区间**
-  展示且永不超过 97%；输入不足 3 项性状时强制「无法判断」。全站与结果页均有
-  **免责横幅**（仅供参考，不构成食用建议）。
+- **不确定性量化**：风险分级为 **低 / 中 / 高 / 无法判断**，证据充分度以**区间**
+  展示且永不超过 97%；输入不足 3 项性状时强制「无法判断」；**证据强度与风险方向
+  解耦**，低风险档不用绿色成功样式，数字旁明确标注「不是安全概率」。全站与结果页
+  均有**免责横幅**（仅供参考，不构成食用建议）。
 - **拍照识别**：上传照片 → FastAPI 代理 → **qwen-vl-plus**（OpenAI 兼容格式，
   密钥只留在后端）；后端不可用时自动降级为纯离线模式。
 - **安全知识问答**：内置 26 条精编常识知识库（来源逐条标注），关键词检索 +
   可选 DeepSeek 润色，控制规模不做完整 RAG。
 - **合规**：删除 Gemini 依赖与"准确率 100%"等绝对化表述；`.env` 不入库；
   `scripts/scan_secrets.py` 提交前扫描密钥；TechSpec/README 已重写为合规版本。
-- **数据背书**：`scripts/analyze_dataset.py` 已在真实 UCI 数据集（8,124 行）上
-  跑通并提交 `distilled_rules.json`（留出集准确率 100.00%、Gini 重要性、100%
-  纯度分支）；引擎权重 v2 按真实数据校准（修复了原引擎 gill-color / ring-type
-  零权重缺口）。
+- **数据背书（v3 重新定性）**：`scripts/analyze_dataset.py` 已在真实 UCI 数据集
+  （8,124 行）上跑通并提交 `distilled_rules.json`；引擎权重 v2 按真实数据校准
+  （修复了原引擎 gill-color / ring-type 零权重缺口）。**真正的安全指标**由
+  `npm run eval:safety` 用真引擎回放全部 8,124 行得出：
+  **3,916 行有毒样本中判为低风险 0 行（假安全率 0/3916）**，代价是 8.79% 假警报
+  （370/4208 可食样本被判高风险）、二分类准确率 95.45%；若把「中风险」也算作警报，
+  则 71.86% 的可食样本会被示警。对照单性状 `odor` 查表基线：准确率 98.52% 更高、
+  假警报 0%，但会漏掉 120/3916（3.06%）有毒样本——即假安全率更差。这就是本项目
+  的取舍：**用准确率换零假安全**。随机森林留出集 100% 已降级为附注（该数据集近线性
+  可分，此数字几乎无信息量，不构成野外能力证据）。
+- **不确定性的正确语义（v3）**：结果页那个数字已从"置信度"改为**证据充分度**——
+  风险档位表达方向，数字只表达证据强弱与区间宽度，UI 明确标注它不是安全概率；
+  低风险档**不再**使用绿色对勾/成功样式（改中性色 + "未发现强风险信号"）；视觉模型
+  自评（物种置信度）不再加权进风险数字，只调整区间宽度。原实现用 `Math.abs(Δscore)`
+  导致风险越低数字越高（3 性状低风险 54%、7 性状锚点组合 72%、22 性状全观察 92%），
+- **模态可观测性（v3）**：`odor`（气味）与 `stalkRoot`（地下菌柄根部）无法从照片
+  观察，已从视觉提示词代码表与 `_sanitize` 白名单中移除，合并层再做一次丢弃拦截；
+  被丢弃的性状会在结果页显式提示。手工录入不受影响（人站在标本前可以闻、可以挖）。
 - **易用性**：5 个一键示例场景（大青褶伞→高、鸡油菌形态→低、毒蝇伞外观→无法
   判断、混合信号→中、信息不足→无法判断）；拍照模式置信度融合（视觉 model
   confidence 参与最终区间 + 双通道一致性指示）；离线结果页提供确定性"专家解读"
@@ -306,7 +366,8 @@ mycoguard/
   内置样例照片一键体验。
 - **中英双语（v5）**：右上角 EN / 中文 一键切换、即时生效；风险分级、专家解读、
   规则文案、免责声明与全部界面标签均已双语化（字典 `src/i18n.tsx`）。
-- **测试**：vitest 399 项 + pytest 43 项（LLM 全部 mock，离线可跑）。
+- **测试**：vitest 443 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
+  用真实 UCI 数据回放引擎的安全回归护栏（假安全数必须为 0，指标退化即变红）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端
 `pip install -r app/requirements.txt && uvicorn app.main:app --port 8000`，
@@ -318,13 +379,19 @@ mycoguard/
 
 - **Dataset bias.** The UCI Mushrooms dataset is a curated teaching set
   (poisonous/edible roughly balanced) — it does **not** reflect real-world
-  species distributions or local flora. The 100.00% held-out accuracy is a
-  property of that easy dataset, not a field-identification guarantee.
+  species distributions or local flora. Its held-out accuracy is ~100% for
+  essentially any model, which is why it is a footnote here and not a claim.
 - **Weights encode dataset statistics, not mycology.** Rules like "buff gill
   color → high risk" come from purity branches in this dataset; a real
   mushroom may differ. Every verdict is a statistical prior, not evidence.
-- **Vision is observational, not forensic.** qwen-vl-plus reports only what
-  it can see; it cannot reliably distinguish look-alike species, and a bad
+- **The 0/3,916 false-safe rate is a replay property, not field validation.**
+  It was measured by re-grading the same UCI rows the weights were distilled
+  from, so it is in-sample by construction and cannot be extrapolated to a
+  real forest. It shows the engine's *logic* never issues a "leans safe"
+  verdict on that data — nothing more.
+- **Vision is observational, not forensic.** qwen-vl-plus can only be asked
+  about traits a photo can show (odor and stalk root are rejected at the
+  sanitizer); it cannot reliably distinguish look-alike species, and a bad
   photo yields `unknown` (by design).
 - **No field validation.** The distilled weights were not re-validated on
   independent field samples.
