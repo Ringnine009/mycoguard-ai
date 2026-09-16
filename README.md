@@ -421,3 +421,17 @@ mycoguard/
 
 [MIT](./LICENSE). MycoGuard is an educational project — see the disclaimer
 above; it is **not** a foraging or medical tool.
+
+---
+
+## Full measured results (the long-form record kept off the site)
+
+The portfolio page shows one conclusion per line, each carrying the numbers and
+the caveat that qualifies it. The paragraphs below are the full-length version
+those lines were compressed from — the same figures, with the reasoning and the
+measurement history that the page deliberately no longer spells out. Nothing here
+is new, and no number on the page differs from this record.
+
+1. Replaying the rule engine over all 8,124 rows of the UCI Mushrooms dataset: 0 of 3,916 poisonous samples were graded low risk — the failure mode that matters for a safety tool. The price is 8.79% false alarms (370 of 4,208 edible samples), reported alongside rather than hidden.
+2. Stated honestly: a single-trait "odor" lookup table scores higher on raw accuracy (98.52%) than the full engine — but it mis-grades 3.06% of poisonous samples as low risk, which is why the headline metric here is false-safe count, not accuracy.
+3. The displayed number is an evidence-strength score (how much was actually observed), not a probability of safety: no verdict can out-display a higher-risk tier, and low-risk results no longer use success styling. The number was rebuilt after an audit showed the original |Δ| formula displayed higher values for safer verdicts.
