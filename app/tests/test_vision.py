@@ -80,16 +80,20 @@ class TestAnalyzeImage:
         assert res["confidence"] == 0.0
 
     def test_drops_invalid_trait_values(self):
+        # NOTE (modality fix): `odor` used to be used here as the "valid" code to
+        # survive sanitizing. Odor is not observable in a photo, so it is now
+        # dropped on purpose — see test_vision_modality.py. gillColor has a
+        # "buff" code `b` that shares no letter with the invalid one.
         llm = make_llm(
             json.dumps({
                 "species_guess": None,
                 "confidence": 0.5,
-                "traits": {"capColor": "zzz-not-a-code", "odor": "f"},
+                "traits": {"capColor": "zzz-not-a-code", "gillColor": "b"},
                 "notes": "",
             })
         )
         res = analyze_image(llm, PNG_1PX, "image/png")
-        assert res["traits"] == {"odor": "f"}
+        assert res["traits"] == {"gillColor": "b"}
 
     def test_invalid_json_raises_llm_error(self):
         llm = make_llm("this is not json at all")
