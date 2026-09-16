@@ -79,19 +79,28 @@ MycoGuard 是一个**离线优先**的蘑菇安全识别助手：把统计模型
 **证据充分度（evidence strength）**——衡量"标本被观察得有多充分"，不是安全概率：
 
 ```
-coverage  = n / 22                                   # 已观察性状占比
-ruleSupport = clamp((命中规则数 − 3) / 3, 0, 1)        # 3 条是方向性判断的门槛
-conflict    = min(pScore, eScore) / max(pScore, eScore)  # 0=信号一致，→1=两侧抵消
-strength = clamp( 0.50·coverage^1.2 + 0.25·ruleSupport
-                  + 0.10·conflict + (critical ? 0.15 : 0) + 0.02 , 0.02, 0.97 )
+coverage    = n / 22                                   # 已观察性状占比
+ruleSupport = clamp((命中规则数 − 3) / 3, 0, 1)         # 3 条是方向性判断的门槛
+mixed       = pScore > 0 且 eScore > 0（且未命中 critical） # 两侧信号互相抵消
+raw      = 0.50·coverage^1.2 + 0.25·ruleSupport + (critical ? 0.15 : 0)
+           + 0.02 − (mixed ? 0.08 : 0)
+strength = clamp(raw, 0.02, 0.97)
+若 riskLevel ≠ 'high'：strength = min(strength, 0.20)     # 非高风险档显示上限
 相对半宽 relHalf = clamp(0.9 − coverage, 0.15, 0.9) × (critical ? 0.6 : 1)
 interval = [ strength − strength·relHalf , strength + strength·relHalf ] ∩ (0, 0.97]
 ```
 
-**关键不变量（有回归测试）**：公式中不含 `|Δscore|`，也不含 `Δscore` 的符号——
-风险/安全分数差的大小与方向**都不影响**证据强度，因此低风险档绝不会比同等证据
-强度的高风险档显示更高的数字。低风险档在 UI 上使用中性色（无对勾、无绿色），
-数字旁明确标注"不是安全概率"。
+**关键不变量（有回归测试，含全 8,124 行穷举验证）**：
+
+1. 公式中不含 `Δscore` 的符号与大小——**方向不影响证据强度**，因此低风险档绝不会
+   因为"越安全"而拿到更高的数字（这正是原 `|Δscore|` 公式的缺陷）。
+2. 非 `high` 档显示值上限 0.20——**全应用最长的证据条永远不会属于读起来最安全的
+   那个档位**；低风险内部仍按覆盖度区分（3 性状 7% vs 7 性状 20%）。
+3. 冲突信号**扣分而非加分**：同一组性状若两侧信号互相抵消（mixed），其证据强度
+   低于信号一致时——否则会出现"越拿不准越自信"。
+4. 强制 `unknown` 恒为最小值（4%，区间 [2%, 18%]）。
+
+低风险档在 UI 上使用中性色（无对勾、无绿色），数字旁明确标注"不是安全概率"。
 
 档位映射（方向，不变）：`critical → high`；`Δscore ≥ 4 → high`；`Δscore > 0 →
 medium`；`Δscore ≤ −3 → low`；其余 → `medium`。`n < 3` 或可判别性状为 0 →
@@ -159,7 +168,7 @@ interval' = [strength' − margin', strength' + margin'] ⊂ (0, 0.97]
 
 ## 6. 测试
 
-- vitest（448 项）：引擎档位、强制 unknown、**证据强度/方向解耦不变量**、
+- vitest（450 项）：引擎档位、强制 unknown、**证据强度/方向解耦不变量**、
   **低风险档 DOM 无成功样式**、**模态可观测性（含跨语言白名单交叉校验）**、
   **UCI 安全回放与回归护栏（假安全数必须为 0）**、数据驱动规则 v2、示例场景、
   双通道区间融合、离线专家解读、无绝对化语言、免责声明渲染、常量完整性、

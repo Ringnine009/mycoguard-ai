@@ -53,7 +53,7 @@ something you could actually put on GitHub.
 | Photo flow UX | frontend | live stages (preparing → analyzing → traits extracted), **"vision" badges** on vision-derived traits, dual-channel pipeline strip, bundled **sample photos** (`samples/`, try without a camera) |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (448) + pytest (49) | see [Testing](#testing) |
+| Tests | vitest (450) + pytest (49) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -161,15 +161,20 @@ Errors: `413` too large · `415` not an image · `503` vision not configured
    *direction*; the number next to it is **evidence strength** — how well
    observed the specimen is — and is labelled as such in the UI (zh + EN). It
    is deliberately **not** a probability that the mushroom is safe.
-   `evidenceStrength = 0.5·coverage^1.2 + 0.25·rule-support + 0.10·conflict
-   + 0.15·critical`, clamped to `(0, 0.97]`, where `coverage` is observed
-   traits / 22. Neither the sign nor the size of the risk/safety score
-   difference enters it, so a `low` verdict can never look better-evidenced
-   than a `high` one (regression-tested in `src/__tests__/evidence.test.ts`).
+   `evidenceStrength = 0.5·coverage^1.2 + 0.25·rule-support + 0.15·critical
+   + 0.02 − 0.08·(conflicting signals)`, clamped to `(0, 0.97]`, where
+   `coverage` is observed traits / 22 — and capped at **0.20 for every verdict
+   that is not a `high` finding**, so the fullest evidence bar in the app can
+   never belong to the verdict that reads safest. Neither the sign nor the size
+   of the risk/safety score difference enters the formula, and a low/medium
+   verdict can never look better-evidenced than a high one (verified
+   exhaustively over all 8,124 dataset rows in
+   `src/__tests__/evalSafety.test.ts`).
    *Fixed in v3: the old point estimate used `Math.abs(Δscore)`, so it grew
-   with strongly SAFE evidence too — a 4-trait low-risk verdict rendered
-   "54%" for `{odor: a}`, "72%" for a 7-trait anchor set and "92%" for a fully
-   beside a 0–100% scale.*
+   with strongly SAFE evidence too — measured on the pre-fix engine, a 3-trait
+   low-risk verdict rendered "54%", a 7-trait anchor set "72%" and a fully
+   observed specimen "92%", all painted green with a success check beside a
+   0–100% scale.*
 4. **Explainability.** Every verdict lists the rules that fired, with
    severity (`info / warning / critical`) and plain-language details, plus a
    deterministic **offline expert narrative** (no API needed) that names the
@@ -244,7 +249,7 @@ caveat — see `docs/upgrade-notes.md`.
 ## Testing
 
 ```bash
-npx vitest run          # frontend (448 tests): engine grading, forced-unknown,
+npx vitest run          # frontend (450 tests): engine grading, forced-unknown,
                         # evidence-strength/direction separation, low-verdict
                         # DOM safety (no success styling), modality observability,
                         # UCI safety replay + regression guard, scenarios,
@@ -286,7 +291,7 @@ mycoguard/
 │   ├── components/           # canvas, trait panel, scenario chips, photo
 │   │                         # capture, result, chat, disclaimer, icons
 │   ├── styles/global.css     # light design system (mobile-ready)
-│   └── __tests__/            # vitest (448 tests)
+│   └── __tests__/            # vitest (450 tests)
 ├── samples/                  # bundled demo photos for the "试用样例" button
 ├── scripts/
 │   ├── analyze_dataset.py    # UCI RF distillation (evidence script)
@@ -366,7 +371,7 @@ mycoguard/
   内置样例照片一键体验。
 - **中英双语（v5）**：右上角 EN / 中文 一键切换、即时生效；风险分级、专家解读、
   规则文案、免责声明与全部界面标签均已双语化（字典 `src/i18n.tsx`）。
-- **测试**：vitest 448 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
+- **测试**：vitest 450 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
   用真实 UCI 数据回放引擎的安全回归护栏（假安全数必须为 0，指标退化即变红）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端

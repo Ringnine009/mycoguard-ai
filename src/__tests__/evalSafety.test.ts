@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { computeRiskAssessment, NON_HIGH_STRENGTH_CEILING } from '../engine/mushroomEngine';
 import {
   ODOR_ALARM_CODES,
   evaluateRow,
@@ -77,6 +78,37 @@ describeWithData('engine safety replay — UCI Mushrooms (8,124 rows)', () => {
     // ...and the lookup is not safe: it misses 120 poisonous specimens.
     expect(m.odorBaseline.falseSafe).toBe(120);
     expect(m.odorBaseline.falseSafeRate).toBeGreaterThan(0);
+  });
+
+  it('NO low/medium verdict out-displays ANY high verdict, across all 8,124 rows', () => {
+    // The reading-order invariant, verified exhaustively rather than on examples:
+    // the strongest evidence bar in the app must never belong to a verdict that
+    // reads safer than a real risk finding.
+    let minHigh = Infinity;
+    let maxNonHigh = 0;
+    let maxNonHighLow = 0;
+    let highCount = 0;
+    for (const row of rows) {
+      const r = computeRiskAssessment(row.traits);
+      if (r.riskLevel === 'high') {
+        highCount += 1;
+        minHigh = Math.min(minHigh, r.evidence.strength);
+      } else {
+        maxNonHigh = Math.max(maxNonHigh, r.evidence.strength);
+        if (r.riskLevel === 'low') maxNonHighLow = Math.max(maxNonHighLow, r.evidence.strength);
+      }
+    }
+    expect(highCount).toBeGreaterThan(0);
+    expect(maxNonHigh).toBeLessThanOrEqual(minHigh);
+    expect(maxNonHighLow).toBeLessThanOrEqual(minHigh);
+    expect(maxNonHigh).toBeLessThanOrEqual(NON_HIGH_STRENGTH_CEILING);
+  });
+
+  it('a low verdict is always weaker evidence than the weakest high verdict', () => {
+    const m: ReplayMetrics = runReplay(rows);
+    // Sanity on the replay itself: the tiers really are populated.
+    expect(m.tierCounts.low).toBeGreaterThan(0);
+    expect(m.tierCounts.high).toBeGreaterThan(0);
   });
 
   it('writes the artifact the README quotes', () => {

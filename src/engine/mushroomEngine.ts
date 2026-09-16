@@ -48,6 +48,17 @@ export const MIN_TRAITS = 3;
 export const MAX_CONFIDENCE = 0.97;
 /** Total trait slots in MushroomTraits — the denominator of coverage. */
 export const TOTAL_TRAITS = 22;
+/**
+ * Display ceiling for every verdict that is NOT a `high` risk finding.
+ *
+ * A `low` or `medium` verdict is an ABSENCE of a strong finding, so it may never
+ * present itself as better-evidenced than an unambiguous `high` finding — the
+ * longest, fullest evidence bar in the app must never belong to the verdict that
+ * reads safest. Coverage still separates a sparse verdict from a well-observed
+ * one below this ceiling, and the risk tier (plus the neutral styling and the
+ * "not a safety probability" label) carries the direction.
+ */
+export const NON_HIGH_STRENGTH_CEILING = 0.2;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -402,23 +413,23 @@ const GUIDANCE: Record<string, string> = {
 /**
  * EVIDENCE STRENGTH — how well-observed the specimen is, nothing else.
  *
- * Inputs are coverage, rule support and conflict only:
+ * Inputs are coverage, rule support and internal agreement only:
  *   coverage = traits reported / TOTAL_TRAITS   (0..1)
  *   rules    = distinct engine rules that fired (normalised over 3..6 hits —
  *              three rules is the minimum for a directional verdict)
- *   tension  = min(pScore, eScore) / max(pScore, eScore)  (0 = all signals
- *              point one way, →1 = the two sides cancel out)
+ *   mixed    = signals exist on BOTH sides, so they partially cancel out
  *
  * `Math.abs(pScore − eScore)` — the old, unsafe ingredient — is deliberately
- * absent: neither the sign nor the size of the risk/safety score difference
- * may move this number, otherwise strong evidence FOR the safe class would
- * inflate it and a "low risk" verdict would render a higher score than a
- * "high risk" one (the pre-fix bug: 74% for low, 92% for the strongest case).
+ * absent: neither the sign nor the size of the risk/safety score difference may
+ * move this number, otherwise strong evidence FOR the safe class would inflate
+ * it and a "low risk" verdict would render a higher score than a "high risk" one
+ * (the pre-fix bug: 54% for a low verdict, 92% for the strongest case).
  *
- * `critical` adds a small fixed bonus (0.15) because a decisive risk signal is
- * stronger evidence than a vague one. It is the SAME bonus for every tier that
- * fires one, so it cannot make `low` outscore `high`, and a broader
- * observation set can still out-score a narrow critical hit.
+ * Internal agreement matters in the DIRECTION-FREE sense only: signals that
+ * contradict each other buy less evidence than signals that agree, whichever way
+ * they agree. So a mixed `medium` verdict cannot out-score a clear `critical`
+ * high verdict at equal coverage, and a set of agreeing safety anchors is not
+ * penalised (they do not contradict anything). Both are regression-tested.
  */
 export function evidenceStrength(args: {
   active: number;
@@ -431,15 +442,17 @@ export function evidenceStrength(args: {
   const { active, pScore, eScore, ruleHits, critical, discriminative } = args;
   const coverage = clamp(active / TOTAL_TRAITS, 0, 1);
   const ruleFactor = clamp((ruleHits - 3) / 3, 0, 1);
-  const hi = Math.max(pScore, eScore);
-  const tension = hi > 0 ? clamp(Math.min(pScore, eScore) / hi, 0, 1) : 0;
+  // Both sides fired: the observation set contradicts itself. A critical signal
+  // is decisive on its own, so the penalty is not applied to it (that would make
+  // "one unambiguous critical hit" look weaker than "several conflicting hints").
+  const mixed = pScore > 0 && eScore > 0 && !critical;
 
   const raw =
     0.5 * Math.pow(coverage, 1.2) +
     0.25 * ruleFactor +
-    0.1 * tension +
     (critical ? 0.15 : 0) +
-    (discriminative > 0 ? 0.02 : 0);
+    (discriminative > 0 ? 0.02 : 0) -
+    (mixed ? 0.08 : 0);
   return clamp(raw, 0.02, MAX_CONFIDENCE);
 }
 
@@ -473,7 +486,7 @@ export function computeRiskAssessment(traits: MushroomTraits): RiskAssessment {
 
   // Strength of the evidence — NOT a directional confidence, NOT a safety
   // probability. See evidenceStrength() for why |Δscore| is not an input.
-  const strength = evidenceStrength({
+  const rawStrength = evidenceStrength({
     active,
     pScore,
     eScore,
@@ -481,6 +494,9 @@ export function computeRiskAssessment(traits: MushroomTraits): RiskAssessment {
     critical,
     discriminative,
   });
+  // Reading-order guard: a non-high finding cannot out-display a high finding.
+  const strength =
+    riskLevel === 'high' ? rawStrength : Math.min(rawStrength, NON_HIGH_STRENGTH_CEILING);
   const point = strength;
 
   // Interval half-width, as a FRACTION of the evidence strength:

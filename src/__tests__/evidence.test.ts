@@ -124,24 +124,28 @@ describe('evidence strength — direction and strength are decoupled', () => {
     expect(r.evidence.ruleHits).toBe(r.ruleHits.length);
   });
 
-  it('a low verdict with MORE observations may only score by the extra coverage, never as safer', () => {
-    // Not an inequality between tiers (that is asserted above with matched
-    // evidence): five safety anchors genuinely are five observations. What
-    // must hold is that the low verdict's number never exceeds what the SAME
-    // observation count buys on the risk side.
-    const lowAllAnchors = computeRiskAssessment({
-      odor: 'a', gillSize: 'b', gillSpacing: 'w', stalkRoot: 'r', bruises: 't',
-    });
-    const highFiveSame = computeRiskAssessment({
-      odor: 'f', gillSize: 'b', gillSpacing: 'w', stalkRoot: 'r', bruises: 't',
-    });
-    expect(lowAllAnchors.riskLevel).toBe('low');
-    expect(highFiveSame.riskLevel).toBe('high');
-    expect(lowAllAnchors.evidence.strength).toBeLessThanOrEqual(highFiveSame.evidence.strength);
-    // And it stays below the strongest observation sets of any tier.
-    expect(lowAllAnchors.evidence.strength).toBeLessThan(strength({
+  it('a well-observed low verdict may not out-rank a clear high verdict in display strength', () => {
+    // The reading-order rule, one level up from the matched-evidence case: a
+    // low/medium verdict is an ABSENCE of finding, so it must not be presented
+    // as better-evidenced than an unambiguous risk finding — otherwise the
+    // strongest-looking bar in the app belongs to the safest-looking verdict.
+    const lowWide = computeRiskAssessment({
       odor: 'a', gillSize: 'b', gillSpacing: 'w', stalkRoot: 'r', bruises: 't',
       capShape: 'x', capColor: 'n', population: 'a',
+    });
+    const highClear = computeRiskAssessment({ odor: 'f', capShape: 'x', capColor: 'n' });
+    const mixedMedium = computeRiskAssessment({
+      odor: 'n', gillSize: 'n', gillSpacing: 'w', stalkRoot: 'r', bruises: 'f',
+    });
+    expect(lowWide.riskLevel).toBe('low');
+    expect(mixedMedium.riskLevel).toBe('medium');
+    expect(highClear.riskLevel).toBe('high');
+    expect(lowWide.evidence.strength).toBeLessThanOrEqual(highClear.evidence.strength);
+    expect(mixedMedium.evidence.strength).toBeLessThanOrEqual(highClear.evidence.strength);
+    // Conflict must cost evidence, not buy it: a mixed verdict cannot out-score
+    // the same traits resolved one way.
+    expect(mixedMedium.evidence.strength).toBeLessThan(strength({
+      odor: 'f', gillSize: 'n', gillSpacing: 'w', stalkRoot: 'r', bruises: 'f',
     }));
   });
 });
@@ -174,9 +178,14 @@ describe('measured display values — pinned so silent drift is caught', () => {
     }
   });
 
-  it('the strongest observation set is still below certainty (77%, not 92%)', () => {
-    expect(pct(TWENTY_TWO)).toBe(77);
-    expect(computeRiskAssessment(TWENTY_TWO).confidence.upper).toBeLessThanOrEqual(MAX_CONFIDENCE);
+  it('a fully observed but low-risk specimen cannot claim more evidence than a clear finding', () => {
+    // 22/22 traits observed used to read 77% (pre-fix: 92%) for a LOW verdict —
+    // the fullest bar in the app belonging to the safest-reading verdict. The
+    // ceiling keeps such a verdict at 20%, above a 3-trait low verdict (7%) and
+    // below any high finding.
+    expect(pct(TWENTY_TWO)).toBe(20);
+    expect(TWENTY_TWO && computeRiskAssessment(TWENTY_TWO).riskLevel).toBe('low');
+    expect(pct(TWENTY_TWO)).toBeLessThanOrEqual(pct(HIGH_CRITICAL));
   });
 
   it('a 3-trait low verdict shows 7% and a 3-trait critical-high verdict 22%', () => {
@@ -184,12 +193,11 @@ describe('measured display values — pinned so silent drift is caught', () => {
     expect(pct(HIGH_CRITICAL)).toBe(22);
   });
 
-  it('a broader low verdict can exceed a narrow high one only via its coverage', () => {
-    // 7 observed traits (31%) > 3 observed traits (22%): the difference is the
-    // observation count, not the direction — and it stays far from certainty.
-    expect(pct(SEVEN_LOW)).toBe(31);
-    expect(pct(SEVEN_LOW)).toBeGreaterThan(pct(HIGH_CRITICAL));
-    expect(pct(SEVEN_LOW)).toBeLessThan(pct(TWENTY_TWO));
+  it('coverage still separates sparse from well-observed verdicts below the ceiling', () => {
+    expect(pct(LOW)).toBe(7);
+    expect(pct(SEVEN_LOW)).toBe(20);
+    expect(pct(SEVEN_LOW)).toBeGreaterThan(pct(LOW));
+    expect(pct(SEVEN_LOW)).toBeLessThanOrEqual(pct(HIGH_CRITICAL));
   });
 
   it('the forced-unknown verdict is the smallest number the app can show', () => {

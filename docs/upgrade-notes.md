@@ -5,7 +5,7 @@ record first (`red → green`), plus the safety metric the project should have b
 quoting all along. Written so each item can be defended in an interview.
 
 Baseline before this work: **399 vitest / 43 pytest green**, `npm run build` green.
-After: **448 vitest / 49 pytest green**, `npm run build` green.
+After: **450 vitest / 49 pytest green**, `npm run build` green.
 
 ---
 
@@ -44,7 +44,7 @@ disagreeing vision result moved a low-risk display from 54% to **68%**.
 
 ### The failing test
 
-`src/__tests__/evidence.test.ts` (new, 18 tests). Red run: **9 failed**, including
+`src/__tests__/evidence.test.ts` (new, 19 tests). Red run: **9 failed**, including
 
 - `a low-risk verdict is never reported as better-evidenced than a high-risk verdict`
   → `Cannot read properties of undefined (reading 'strength')`
@@ -91,8 +91,9 @@ including `does not use the success tone class anywhere in the low-risk DOM`
 | `{odor a, capShape x, capColor n}` → low risk | **54% green + check** | **7% neutral** (interval 2–12%), "no strong risk signal found" |
 | `{odor f, capShape x, capColor n}` → high risk (critical) | 80% | **22%** (interval 12–31%) |
 | `{spore r, gill b, gillSize n}` → high risk | 80% | **22%** |
-| 7-trait low-risk anchor set | **72%** | **31%** (interval 13–50%) |
-| 22-trait fully observed specimen | **92%** | **77%** (interval 65–89%) |
+| 7-trait low-risk anchor set | **72%** | **20%** (interval 13–27%) |
+| 22-trait fully observed specimen (low risk) | **92%** | **20%** |
+| mixed medium (5 traits, conflicting signals) | 48% | **11%** |
 | forced `unknown` (1 trait) | 18% | **4%** (interval 2–18%) — now the weakest number in the app |
 | low risk + disagreeing confident vision | 54% → **68%** (rose!) | **7%, interval flagged as widened** |
 
@@ -100,6 +101,19 @@ Note the direction of the fix: the *high-risk* number also fell (80% → 22%), b
 the signal is "we have observed 3 things and one of them is critical", not "we are 80%
 sure this is dangerous". Raising the high number while lowering the low one would have
 been a different bug, not a fix.
+
+Two further inversions were found while pinning these numbers — both by *testing*, not
+by reading the code back:
+
+- **Conflict was scoring as evidence.** With an early version of the new formula a
+  *mixed* medium verdict (27.9%) out-scored a *clear critical* high verdict (21.6%):
+  "the signals are confusing, but we are sure of it". Conflict is now a penalty
+  (`−0.08`, not applied to a critical hit, which is decisive by itself).
+- **The fullest evidence bar belonged to the safest-reading verdict.** A fully
+  observed low-risk specimen still displayed 77%, above every high verdict. Verdicts
+  that are not `high` findings are now capped at 20%, and the invariant "no low/medium
+  verdict out-displays any high verdict" is verified **exhaustively over all 8,124
+  dataset rows**, not just on chosen examples.
 
 ### Interview talking points
 
@@ -204,7 +218,7 @@ prevented a future rule change from destroying it.
 
 ### The failing test
 
-`src/__tests__/evalSafety.test.ts` (new, 11 tests) against a new
+`src/__tests__/evalSafety.test.ts` (new, 13 tests) against a new
 `scripts/eval_engine_safety.ts`. Red run: module did not exist
 (`Cannot find module '../../scripts/eval_engine_safety'`).
 
