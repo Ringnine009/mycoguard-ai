@@ -5,7 +5,7 @@ record first (`red → green`), plus the safety metric the project should have b
 quoting all along. Written so each item can be defended in an interview.
 
 Baseline before this work: **399 vitest / 43 pytest green**, `npm run build` green.
-After: **453 vitest / 49 pytest green**, `npm run build` green.
+After: **454 vitest / 49 pytest green**, `npm run build` green.
 
 ---
 
@@ -376,22 +376,41 @@ expectations *were* the bug.
 
 ## Recorded deviations from the task's own constraints
 
-The brief for this work declared the backend API contract shape OUT of scope. The
-modality-observability acceptance criterion then required exactly that change, so
-the conflict is recorded rather than hidden (also in
-`docs/TECHNICAL_SPEC.md` §5.1 and the README API section):
+Three deviations are recorded here rather than left to be re-derived from the diff.
 
-- `POST /api/analyze` keeps its shape (`{status, species_guess, confidence,
-  traits, notes, warnings}` — same keys and types; `app/tests/test_api.py` is
-  unmodified) but **narrows the domain** of `traits` (never `odor`/`stalkRoot`
-  again) and turns `warnings` from a constant `[]` into a live channel.
-- Adjudication: safety wins over "zero contract movement". The domain change
-  makes the payload *more* truthful about what a photograph can support; the
-  shape is untouched, so no client parsing changes.
-- The README tree comment `# vitest (98 tests) → (453 tests)` sits just outside
-  the strict edit scope (a stale line the new files did not touch). It was
-  corrected because leaving a wrong count beside a corrected one is the kind of
-  inconsistency this task exists to remove.
+**1. Backend API contract (declared OUT of scope; required IN by the modality
+criterion).** `POST /api/analyze` keeps its shape (`{status, species_guess,
+confidence, traits, notes, warnings}` — same keys and types; `app/tests/test_api.py`
+is unmodified) but **narrows the domain** of `traits` (never `odor`/`stalkRoot`
+again) and turns `warnings` from a constant `[]` into a live channel. Adjudication:
+safety wins over "zero contract movement" — a photo channel able to report a smell
+is a safety defect, and the change makes the payload *more* truthful, not more
+permissive. Also stated in `docs/TECHNICAL_SPEC.md` §5.1 and the README API
+section, and pinned by `app/tests/test_vision_modality.py` +
+`src/__tests__/modality.test.ts`.
+
+**2. Acceptance criterion wording vs the delivered behaviour (fusion).** AC2 as
+originally written said agreement "may only narrow the interval". The
+implementation deliberately forbids narrowing: agreement is a no-op and only
+disagreement widens (see "One further inversion" below). The delivered behaviour is
+the stricter reading of this task's own red line — *"any change that makes a
+low-risk verdict look more certain is a wrong direction"* — so the criterion is
+superseded, not satisfied literally. If a literal ×0.85 agreement narrowing is ever
+wanted back, it must be re-approved against that red line first.
+
+**3. `scripts/eval_engine_safety.py` → `scripts/eval_engine_safety.ts`.** The task
+text asked for a `.py` script "或 JS 等价物"; the delivered file is the JS
+equivalent, because the rule engine is TypeScript — a Python replayer would be a
+*re-implementation* of the very thing being measured, defeating the point of
+measuring the real engine. The `.ts` file is wired into `package.json`
+(`npm run eval:safety`) and the README, and is what the regression suite imports.
+
+**4. Out-of-strict-scope prose (explicit exception).** The README tree comment
+`# vitest (98 tests) → (454 tests)` and the adjacent count lines sit just outside
+the strict edit scope (stale lines the new files did not touch). They were
+corrected because leaving a wrong count beside a corrected one is the kind of
+inconsistency this task exists to remove — recorded here as an exception rather
+than left silent.
 
 ## One further inversion found by verification
 

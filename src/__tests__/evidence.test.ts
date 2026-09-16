@@ -27,8 +27,9 @@ import { MushroomTraits, RiskAssessment } from '../types';
  *   - the risk TIER carries the direction, the number carries only strength
  *     and interval width — the two are decoupled;
  *   - evidence strength must never be higher for `low` than for `high`;
- *   - the vision channel can only widen/narrow the interval, never move the
- *     point estimate and never change the tier.
+ *   - the vision channel may only WIDEN the interval, never move the point
+ *     estimate, never change the tier, and never make a verdict look more
+ *     precise (agreement is a no-op; only disagreement widens).
  */
 
 /** Verdicts whose evidence is unambiguous, for tier-pair comparisons. */

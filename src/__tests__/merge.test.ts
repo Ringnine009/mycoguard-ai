@@ -82,9 +82,9 @@ describe('evaluateVision — photo identification flows through the shared engin
 });
 
 describe('fuseVisionConfidence — dual-channel confidence fusion', () => {
-  // modelConfidence is interpreted as "visual channel reliability": a
-  // confident visual read raises/narrows the engine interval when it agrees,
-  // and widens it when it disagrees. See merge.ts for the full formula.
+  // modelConfidence is interpreted as "visual channel reliability". It may only
+  // WIDEN the interval: agreement is a no-op, disagreement widens. The visual
+  // channel never raises/narrows the engine interval — see merge.ts.
 
   it('no vision → interval and consistency untouched', () => {
     const manual = { odor: 'a', capShape: 'x', capColor: 'n' };

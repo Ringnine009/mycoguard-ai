@@ -305,8 +305,18 @@ interface I18nValue {
 
 const LangContext = createContext<I18nValue>({ lang: 'zh', setLang: () => {}, t: (k) => k });
 
-export const LangProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const [lang, setLang] = useState<Lang>('zh');
+/**
+ * `initialLang` exists so the English surface is *renderable* (and therefore
+ * testable at the DOM level). Without it the provider was hard-wired to zh and
+ * the EN copy could only be asserted through the dictionary — which proves a
+ * translation exists, not that the result page ever shows it. That gap is how a
+ * "zh + EN" claim becomes unfalsifiable.
+ */
+export const LangProvider: React.FC<{ children?: React.ReactNode; initialLang?: Lang }> = ({
+  children,
+  initialLang = 'zh',
+}) => {
+  const [lang, setLang] = useState<Lang>(initialLang);
   const t = (key: string) => translate(key, lang);
   return <LangContext.Provider value={{ lang, setLang, t }}>{children}</LangContext.Provider>;
 };

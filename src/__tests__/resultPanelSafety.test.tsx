@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { ResultPanel } from '../components/ResultPanel';
 import { computeRiskAssessment } from '../engine/mushroomEngine';
 import { evaluateVision } from '../engine/merge';
-import { LangProvider, translate } from '../i18n';
+import { Lang, LangProvider, translate } from '../i18n';
 import { MushroomTraits, RiskAssessment } from '../types';
 
 /**
@@ -22,10 +22,10 @@ import { MushroomTraits, RiskAssessment } from '../types';
 const LOW: MushroomTraits = { odor: 'a', capShape: 'x', capColor: 'n' };
 const HIGH: MushroomTraits = { odor: 'f', capShape: 'x', capColor: 'n' };
 
-const render = (traits: MushroomTraits): string => {
+const render = (traits: MushroomTraits, lang: Lang = 'zh'): string => {
   const assessment = computeRiskAssessment(traits);
   return renderToString(
-    <LangProvider>
+    <LangProvider initialLang={lang}>
       <ResultPanel assessment={assessment} traits={traits} filledTraits={3} />
     </LangProvider>,
   );
@@ -55,11 +55,22 @@ describe('ResultPanel — a low verdict carries no success affordance', () => {
   });
 
   it('the safety label itself carries the "not a probability of safety" wording', () => {
-    // The DOM renders zh by default; the English string is asserted through the
-    // dictionary below. What matters here is that the caveat is IN the DOM.
     const html = render(LOW);
     expect(html).toContain('证据充分度');
     expect(html).toContain('不是安全概率');
+  });
+
+  it('renders the same caveat in ENGLISH at the DOM level, not just in the dictionary', () => {
+    // A dictionary entry proves a translation exists; it does not prove the
+    // result page ever shows it. The low verdict must carry the caveat in both
+    // languages inside the rendered HTML.
+    const html = render(LOW, 'en');
+    expect(html).toContain('Evidence strength');
+    expect(html).toContain('not a probability of safety');
+    expect(html).toContain('No strong risk signal found');
+    expect(html).toContain('Low risk');
+    expect(html).not.toContain('shield-check');
+    expect(classes(html)).not.toContain('safe');
   });
 
   it('never renders a 0-100% safety scale for the verdict number', () => {
