@@ -146,6 +146,62 @@ describe('evidence strength — direction and strength are decoupled', () => {
   });
 });
 
+describe('measured display values — pinned so silent drift is caught', () => {
+  /**
+   * These are the numbers the UI actually renders, measured after the v3 fix.
+   * The BEFORE values (from the pre-fix `|Δscore|` formula, re-measured against
+   * the current rule table) were 54% / 80% / 72% / 92% / 18% — i.e. the two
+   * LOW verdicts sat between the high verdict and a fully observed specimen.
+   * See docs/upgrade-notes.md for the full table.
+   */
+  const pct = (t: MushroomTraits): number => Math.round(computeRiskAssessment(t).evidence.strength * 100);
+
+  const SEVEN_LOW: MushroomTraits = {
+    odor: 'a', gillSize: 'b', gillSpacing: 'w', stalkRoot: 'r', bruises: 't', capShape: 'x', capColor: 'n',
+  };
+  const TWENTY_TWO: MushroomTraits = {
+    capShape: 'x', capSurface: 'f', capColor: 'n', bruises: 't', odor: 'a',
+    gillAttachment: 'f', gillSpacing: 'w', gillSize: 'b', gillColor: 'e',
+    stalkShape: 'e', stalkRoot: 'r', stalkSurfaceAbove: 'f', stalkSurfaceBelow: 'f',
+    stalkColorAbove: 'n', stalkColorBelow: 'n', veilType: 'p', veilColor: 'w',
+    ringNumber: 'o', ringType: 'f', sporePrintColor: 'k', population: 'a', habitat: 'w',
+  };
+
+  it('every tier renders a strictly sub-certainty percentage', () => {
+    for (const t of [LOW, HIGH_CRITICAL, HIGH_MULTI, SEVEN_LOW, TWENTY_TWO]) {
+      expect(pct(t)).toBeGreaterThan(0);
+      expect(pct(t)).toBeLessThan(100);
+    }
+  });
+
+  it('the strongest observation set is still below certainty (77%, not 92%)', () => {
+    expect(pct(TWENTY_TWO)).toBe(77);
+    expect(computeRiskAssessment(TWENTY_TWO).confidence.upper).toBeLessThanOrEqual(MAX_CONFIDENCE);
+  });
+
+  it('a 3-trait low verdict shows 7% and a 3-trait critical-high verdict 22%', () => {
+    expect(pct(LOW)).toBe(7);
+    expect(pct(HIGH_CRITICAL)).toBe(22);
+  });
+
+  it('a broader low verdict can exceed a narrow high one only via its coverage', () => {
+    // 7 observed traits (31%) > 3 observed traits (22%): the difference is the
+    // observation count, not the direction — and it stays far from certainty.
+    expect(pct(SEVEN_LOW)).toBe(31);
+    expect(pct(SEVEN_LOW)).toBeGreaterThan(pct(HIGH_CRITICAL));
+    expect(pct(SEVEN_LOW)).toBeLessThan(pct(TWENTY_TWO));
+  });
+
+  it('the forced-unknown verdict is the smallest number the app can show', () => {
+    const u = computeRiskAssessment({ odor: 'f' });
+    expect(Math.round(u.evidence.strength * 100)).toBe(4);
+    expect(u.confidence).toEqual({ point: 0.04, lower: 0.02, upper: 0.18 });
+    for (const t of [LOW, HIGH_CRITICAL, HIGH_MULTI, SEVEN_LOW]) {
+      expect(u.evidence.strength).toBeLessThan(computeRiskAssessment(t).evidence.strength);
+    }
+  });
+});
+
 describe('vision fusion may not manufacture certainty', () => {
   const base = computeRiskAssessment(LOW);
   const vision = (modelConfidence: number) => ({

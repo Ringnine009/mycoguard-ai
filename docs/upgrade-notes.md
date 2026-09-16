@@ -5,7 +5,7 @@ record first (`red → green`), plus the safety metric the project should have b
 quoting all along. Written so each item can be defended in an interview.
 
 Baseline before this work: **399 vitest / 43 pytest green**, `npm run build` green.
-After: **443 vitest / 49 pytest green**, `npm run build` green.
+After: **448 vitest / 49 pytest green**, `npm run build` green.
 
 ---
 
@@ -44,7 +44,7 @@ disagreeing vision result moved a low-risk display from 54% to **68%**.
 
 ### The failing test
 
-`src/__tests__/evidence.test.ts` (new, 13 tests). Red run: **9 failed**, including
+`src/__tests__/evidence.test.ts` (new, 18 tests). Red run: **9 failed**, including
 
 - `a low-risk verdict is never reported as better-evidenced than a high-risk verdict`
   → `Cannot read properties of undefined (reading 'strength')`

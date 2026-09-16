@@ -53,7 +53,7 @@ something you could actually put on GitHub.
 | Photo flow UX | frontend | live stages (preparing → analyzing → traits extracted), **"vision" badges** on vision-derived traits, dual-channel pipeline strip, bundled **sample photos** (`samples/`, try without a camera) |
 | Offline-first degradation | `src/services/backend.ts` + `/api/health` | manual analysis works with no backend; photo/chat degrade to a clear message |
 | Safety-knowledge chat | `app/services/chat.py` | rule-first, optional DeepSeek |
-| Tests | vitest (443) + pytest (49) | see [Testing](#testing) |
+| Tests | vitest (448) + pytest (49) | see [Testing](#testing) |
 | Secret hygiene | `scripts/scan_secrets.py` | pre-commit scan; `.env` never committed |
 
 ---
@@ -244,7 +244,7 @@ caveat — see `docs/upgrade-notes.md`.
 ## Testing
 
 ```bash
-npx vitest run          # frontend (443 tests): engine grading, forced-unknown,
+npx vitest run          # frontend (448 tests): engine grading, forced-unknown,
                         # evidence-strength/direction separation, low-verdict
                         # DOM safety (no success styling), modality observability,
                         # UCI safety replay + regression guard, scenarios,
@@ -286,7 +286,7 @@ mycoguard/
 │   ├── components/           # canvas, trait panel, scenario chips, photo
 │   │                         # capture, result, chat, disclaimer, icons
 │   ├── styles/global.css     # light design system (mobile-ready)
-│   └── __tests__/            # vitest (443 tests)
+│   └── __tests__/            # vitest (448 tests)
 ├── samples/                  # bundled demo photos for the "试用样例" button
 ├── scripts/
 │   ├── analyze_dataset.py    # UCI RF distillation (evidence script)
@@ -366,7 +366,7 @@ mycoguard/
   内置样例照片一键体验。
 - **中英双语（v5）**：右上角 EN / 中文 一键切换、即时生效；风险分级、专家解读、
   规则文案、免责声明与全部界面标签均已双语化（字典 `src/i18n.tsx`）。
-- **测试**：vitest 443 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
+- **测试**：vitest 448 项 + pytest 49 项（LLM 全部 mock，离线可跑）；其中包含
   用真实 UCI 数据回放引擎的安全回归护栏（假安全数必须为 0，指标退化即变红）。
 
 **快速开始**：`npm install && npm run dev`（纯离线）；后端
