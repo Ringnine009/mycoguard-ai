@@ -26,14 +26,19 @@ describe('riskPresentation — four-tier language', () => {
     for (const level of ['low', 'medium', 'high', 'unknown'] as RiskLevel[]) {
       const p = riskPresentation(level);
       expect(p.label.length).toBeGreaterThan(0);
-      expect(p.tone).toMatch(/^(danger|warn|safe|muted)$/);
+      expect(p.tone).toMatch(/^(danger|warn|neutral|muted)$/);
       expect(p.icon).toBeTruthy();
     }
   });
 
-  it('high risk maps to danger tone, low to safe tone', () => {
+  it('high risk maps to danger, low to NEUTRAL (never a success tone)', () => {
     expect(riskPresentation('high').tone).toBe('danger');
-    expect(riskPresentation('low').tone).toBe('safe');
+    // v3: `low` used to map to `safe`, which painted a green check next to the
+    // verdict number. "No strong risk signal found" is not a success state.
+    expect(riskPresentation('low').tone).toBe('neutral');
     expect(riskPresentation('unknown').tone).toBe('muted');
+    for (const level of ['low', 'medium', 'high', 'unknown'] as RiskLevel[]) {
+      expect(riskPresentation(level).tone).not.toBe('safe');
+    }
   });
 });

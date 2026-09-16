@@ -59,6 +59,6 @@ describe('i18n — bilingual presentation', () => {
     const steps = buildVisionPipeline(vision, assessment, 3, 'en');
     expect(steps[0].kicker).toBe('Vision');
     expect(steps[1].detail).toBe('1 vision traits');
-    expect(steps[3].kicker).toBe('Fused confidence');
+    expect(steps[3].kicker).toBe('Fused evidence interval');
   });
 });

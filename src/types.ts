@@ -2,8 +2,13 @@
  * Core domain types for MycoGuard.
  *
  * Risk language is deliberately non-absolute: MycoGuard never states that a
- * mushroom is "edible" or "poisonous". Every verdict is a risk level with a
- * confidence *interval* (never a single point, never 100%).
+ * mushroom is "edible" or "poisonous". Every verdict is a risk level with an
+ * evidence-strength *interval* (never a single point, never 100%).
+ *
+ * SAFETY SEMANTICS (do not weaken): the risk TIER carries the direction of
+ * the verdict; the number carries only how much observational coverage backs
+ * it. The number is NOT — and must never be rendered as — the probability
+ * that the mushroom is safe. See engine/mushroomEngine.ts `evidenceStrength`.
  */
 
 /** The 22 morphological traits from the UCI Mushrooms dataset (original codes). */
@@ -36,14 +41,38 @@ export type MushroomTraits = {
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
 /**
- * Confidence is always an interval [lower, upper] with a point estimate.
+ * Evidence strength, always an interval [lower, upper] with a point estimate.
  * Values are clamped to (0, 0.97): the engine is calibrated so it can never
  * claim certainty.
+ *
+ * `point` is the evidence-strength estimate (how well-observed the specimen
+ * is) — deliberately NOT a directional confidence and NOT a safety
+ * probability. A `low` verdict must never score higher here than a `high`
+ * verdict built on comparable evidence.
  */
 export interface ConfidenceInterval {
   point: number;
   lower: number;
   upper: number;
+}
+
+/**
+ * Machine-readable companion to `RiskAssessment.confidence`, so the UI and
+ * the safety regression suite can assert on semantics instead of on a bare
+ * number.
+ */
+export interface EvidenceSummary {
+  /** Evidence strength, 0..1 — identical to `confidence.point`. */
+  strength: number;
+  /** Traits the user (or the vision channel) actually reported. */
+  traitsObserved: number;
+  /** Number of engine rules that fired on those traits. */
+  ruleHits: number;
+  /**
+   * True when the interval was widened because the visual channel disagreed —
+   * i.e. the strength is less trustworthy than the point suggests.
+   */
+  intervalWidened: boolean;
 }
 
 export type SignalSeverity = 'info' | 'warning' | 'critical';
@@ -65,7 +94,10 @@ export type VisionConsistency = 'agree' | 'partial' | 'disagree' | 'n-a';
 
 export interface RiskAssessment {
   riskLevel: RiskLevel;
+  /** Evidence-strength interval — see ConfidenceInterval. Not a safety chance. */
   confidence: ConfidenceInterval;
+  /** Same number, plus the metadata that explains what it means. */
+  evidence: EvidenceSummary;
   reasoning: string;
   guidance: string;
   ruleHits: RuleHit[];

@@ -17,13 +17,26 @@ const vision = (overrides: Partial<VisionResult>): VisionResult => ({
 describe('buildVisionPipeline — dual-channel flow visualization', () => {
   it('emits the four documented steps in order', () => {
     const v = vision({ speciesGuess: 'Amanita muscaria', traits: { capColor: 'r', capShape: 'x' }, modelConfidence: 0.85 });
-    const assessment = evaluateVision({ odor: 'f' }, v);
+    const traits = { odor: 'f' };
+    const assessment = evaluateVision(traits, v);
     const steps = buildVisionPipeline(v, assessment, 5);
     expect(steps.map((s) => s.id)).toEqual(['vision', 'traits', 'engine', 'fusion']);
     expect(steps[0].detail).toBe('Amanita muscaria');
     expect(steps[1].detail).toContain('2 项');
     expect(steps[2].detail).toContain('5 项');
-    expect(steps[3].detail).toContain('一致'); // agree band for |0.8-0.85|
+    // The gap between the evidence strength and the model's species confidence
+    // decides the band. Anchor the model to the engine's number so this test
+    // checks the plumbing, not an incidental value of the strength formula.
+    expect(assessment.visionConsistency).toBe('disagree');
+    expect(steps[3].detail).toContain('存在分歧');
+
+    const agreeing = vision({
+      speciesGuess: 'Amanita muscaria',
+      traits: { capColor: 'r', capShape: 'x' },
+      modelConfidence: computeRiskAssessment(traits).confidence.point,
+    });
+    const agreeSteps = buildVisionPipeline(agreeing, evaluateVision(traits, agreeing), 5);
+    expect(agreeSteps[3].detail).toContain('一致');
   });
 
   it('shows "未能识别物种" when the model has no guess', () => {

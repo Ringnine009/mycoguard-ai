@@ -245,7 +245,7 @@ const AppInner: React.FC = () => {
             {t('离线规则引擎（随机森林逻辑蒸馏 · UCI Mushrooms）')}
           </span>
           <span>{t('风险分级：低 / 中 / 高 / 无法判断')}</span>
-          <span>{t('置信度区间 ∈ (0, 97%]')}</span>
+          <span>{t('证据充分度区间 ∈ (0, 97%]（非安全概率）')}</span>
           <span>{t('视觉增强：qwen-vl-plus（可选后端）')}</span>
         </div>
       </footer>

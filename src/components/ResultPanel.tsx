@@ -5,12 +5,12 @@ import { buildExpertNarrative } from '../engine/expert';
 import { buildVisionPipeline } from '../engine/pipeline';
 import { DisclaimerBanner } from './disclaimer';
 import { useI18n } from '../i18n';
-import { AlertTriangle, HelpCircle, ShieldAlert, ShieldCheck, ShieldX } from './icons';
+import { AlertTriangle, HelpCircle, ShieldAlert, ShieldX } from './icons';
 
 const TONE_CLASS: Record<string, string> = {
   danger: 'danger',
   warn: 'warn',
-  safe: 'safe',
+  neutral: 'neutral',
   muted: 'muted',
 };
 
@@ -60,11 +60,27 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
   const pointPct = Math.round(assessment.confidence.point * 100);
   const consistency = assessment.visionConsistency;
 
-  const RiskIcon = meta.icon === 'shield-x' ? ShieldX : meta.icon === 'shield-alert' ? ShieldAlert : meta.icon === 'shield-check' ? ShieldCheck : HelpCircle;
+  /**
+   * SAFETY: a `low` verdict is "no strong risk signal found" — never a
+   * success state. It renders neutrally, without the green shield-check, and
+   * its number is labelled as evidence strength (explicitly NOT a safety
+   * probability). Only risk-side tiers get the danger/warn shields.
+   */
+  const RiskIcon =
+    meta.icon === 'shield-x' ? ShieldX : meta.icon === 'shield-alert' ? ShieldAlert : HelpCircle;
+  const isLow = assessment.riskLevel === 'low';
+  const toneVar =
+    tone === 'danger' ? 'var(--danger)' : tone === 'warn' ? 'var(--warn)' : 'var(--muted-c)';
+
+  const widthNote = assessment.evidence.intervalWidened
+    ? t('区间因双通道分歧加宽（证据强度不可按点估计理解）')
+    : consistency === 'agree'
+      ? t('区间因双通道一致收窄')
+      : null;
 
   return (
     <div className="result-area">
-      <div className={`result-card top-border ${tone === 'safe' ? 'safe' : ''}`} style={{ ['--tone' as string]: tone === 'danger' ? 'var(--danger)' : tone === 'warn' ? 'var(--warn)' : tone === 'safe' ? 'var(--safe)' : 'var(--muted-c)' }}>
+      <div className="result-card top-border" style={{ ['--tone' as string]: toneVar }}>
         <div className="result-head">
           <div>
             <span className={`risk-badge ${tone}`}>
@@ -77,12 +93,14 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
           </div>
         </div>
 
-        <div className="conf-block">
+        <div className="conf-block" data-evidence="strength">
           <div className="conf-row">
             <span className="conf-point">{conf.point}</span>
             <span className="conf-range">{t('区间')} {conf.range}</span>
-            <span className="conf-label">{t('置信度区间')}</span>
+            <span className="conf-label">{t('证据充分度')}</span>
           </div>
+          {/* Bar length is the evidence interval only — there is no 0-100%
+              safety scale, because the number is not a safety probability. */}
           <div className="conf-bar">
             <div
               className="conf-band"
@@ -90,11 +108,13 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
             />
             <div className="conf-marker" style={{ left: `${pointPct}%` }} />
           </div>
-          <div className="conf-scale">
-            <span>0%</span>
-            <span>50%</span>
-            <span>100%</span>
+          <div className="conf-note">
+            {t('该数字表示证据充分度，不是安全概率，也不是可食用的可能性。')}
           </div>
+          {isLow && (
+            <div className="conf-note low">{t('未发现强风险信号——这不等于可以食用。')}</div>
+          )}
+          {widthNote && <div className="conf-note">{widthNote}</div>}
         </div>
 
         <div className="result-body">
@@ -144,6 +164,12 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({ assessment, traits, vi
               {vision.notes && <span className="chip vision">{vision.notes}</span>}
               {consistency && (
                 <span className={`chip consistency ${consistency}`}>{t(CONSISTENCY_ZH[consistency])}</span>
+              )}
+              {(vision.warnings ?? []).length > 0 && (
+                <span className="chip consistency disagree">
+                  {t('模型报告了无法从照片观察的性状，已丢弃：')}
+                  {vision.warnings.join('；')}
+                </span>
               )}
             </div>
           )}

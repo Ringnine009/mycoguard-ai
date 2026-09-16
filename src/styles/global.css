@@ -694,8 +694,12 @@ body {
 
 .risk-badge.danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(220, 38, 38, 0.35); }
 .risk-badge.warn { background: var(--warn-dim); color: var(--warn); border: 1px solid rgba(180, 83, 9, 0.35); }
-.risk-badge.safe { background: var(--safe-dim); color: var(--safe); border: 1px solid rgba(5, 150, 105, 0.35); }
 .risk-badge.muted { background: var(--muted-dim); color: var(--muted-c); border: 1px solid var(--border-strong); }
+/* A `low` verdict is "no strong risk signal found" — a neutral state, never a
+   green success confirmation (which reads as "safe to eat"). Kept for the
+   legacy `.safe` selector so old builds never silently regain the success look. */
+.risk-badge.neutral,
+.risk-badge.safe { background: var(--muted-dim); color: var(--muted-c); border: 1px solid var(--border-strong); }
 
 .result-title { margin: 8px 0 0; font-size: 15px; font-weight: 700; }
 
@@ -738,14 +742,16 @@ body {
   box-shadow: 0 0 5px var(--tone, var(--muted-c));
 }
 
-.conf-scale {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--faint);
-  margin-top: 5px;
+/* There is deliberately NO 0/50/100% scale under this bar: the number is an
+   evidence-strength estimate, not a probability of safety. */
+.conf-note {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
 }
+
+.conf-note.low { color: var(--muted-c); font-weight: 600; }
 
 .result-body { padding: 4px 18px 16px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -809,8 +815,10 @@ body {
 
 .guidance-box.danger { border-color: rgba(220, 38, 38, 0.4); background: var(--danger-dim); color: var(--danger-text); }
 .guidance-box.warn { border-color: rgba(180, 83, 9, 0.4); background: var(--warn-dim); color: var(--warn-text); }
-.guidance-box.safe { border-color: rgba(5, 150, 105, 0.4); background: var(--safe-dim); color: var(--safe-text); }
 .guidance-box.muted { border-color: var(--border-strong); background: var(--muted-dim); color: var(--muted); }
+/* Neutral (low verdict) + legacy `.safe` alias: informational, not celebratory. */
+.guidance-box.neutral,
+.guidance-box.safe { border-color: var(--border-strong); background: var(--muted-dim); color: var(--muted-c); }
 
 .reasoning-box { font-size: 13px; color: var(--muted); line-height: 1.75; white-space: pre-line; }
 

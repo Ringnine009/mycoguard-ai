@@ -122,8 +122,11 @@ const TRANSLATIONS: Record<string, string> = {
   '原尺寸': 'original size',
   '样例加载失败（HTTP': 'Sample load failed (HTTP',
   '样例加载失败。': 'Sample load failed.',
-  '视觉识别通过后端代理调用多模态模型（qwen-vl-plus），模型只会记录它实际看到的性状；\n不足 3 项时同样强制「无法判断」。模型输出仅作为观察补充，不改变离线规则引擎的风险语言。':
-    'Vision analysis is proxied through the backend (qwen-vl-plus); the model only records traits it can actually see. Fewer than 3 traits still force "unknown". Model output is a supplementary observation and never changes the rule engine\u2019s risk language.',
+  '视觉识别通过后端代理调用多模态模型（qwen-vl-plus），模型只报告照片里能看见的性状（气味、菌柄根部这类无法从照片判断的性状不会被报告）；\n不足 3 项时同样强制「无法判断」。模型输出仅作为观察补充，不改变离线规则引擎的风险语言。':
+    'Vision analysis is proxied through the backend (qwen-vl-plus); the model reports only traits visible in the photo (traits a photo cannot show, such as odor or the underground stalk root, are never reported). Fewer than 3 traits still force "unknown". Model output is a supplementary observation and never changes the rule engine\u2019s risk language.',
+  '模型报告了无法从照片观察的性状，已丢弃：': 'The model reported traits that a photo cannot show; discarded: ',
+  '气味与菌柄根部请手动录入（照片无法判断）。':
+    'Enter odor and stalk root manually — a photo cannot establish them.',
   '至少录入': 'Enter at least',
   '3 项': '3',
   '判别性性状才能给出方向性风险判断；不足时结果将强制为「无法判断」。': 'discriminative traits to get a directional risk verdict; otherwise the result is forced to "unknown".',
@@ -134,12 +137,19 @@ const TRANSLATIONS: Record<string, string> = {
   // ---------- Result panel ----------
   '风险分级结果（不确定性量化）': 'Risk assessment (uncertainty-quantified)',
   '信息不足，已强制「无法判断」': 'Insufficient input — forced to "unknown"',
-  '置信度区间': 'CONFIDENCE INTERVAL',
+  '证据充分度': 'Evidence strength',
+  '该数字表示证据充分度，不是安全概率，也不是可食用的可能性。':
+    'This number is evidence strength — it is not a probability of safety, and not a chance that the mushroom is edible.',
+  '未发现强风险信号——这不等于可以食用。':
+    'No strong risk signal found — that does not mean it is safe to eat.',
+  '区间因双通道分歧加宽（证据强度不可按点估计理解）':
+    'Interval widened by channel disagreement (do not read the point estimate as strength).',
+  '区间因双通道一致收窄': 'Interval narrowed by channel agreement',
   '双通道分析链路': 'Dual-channel pipeline',
   '视觉识别': 'Vision',
   '性状提取': 'Traits',
   '规则引擎': 'Rule engine',
-  '融合置信度': 'Fused confidence',
+  '融合证据区间': 'Fused evidence interval',
   '疑似物种：': 'Species guess: ',
   '（模型自评': ' (model confidence ',
   '%）': '%)',
@@ -233,7 +243,7 @@ const TRANSLATIONS: Record<string, string> = {
   // ---------- Footer ----------
   '离线规则引擎（随机森林逻辑蒸馏 · UCI Mushrooms）': 'Offline rule engine (RF logic distillation · UCI Mushrooms)',
   '风险分级：低 / 中 / 高 / 无法判断': 'Risk tiers: low / medium / high / unknown',
-  '置信度区间 ∈ (0, 97%]': 'confidence interval ∈ (0, 97%]',
+  '证据充分度区间 ∈ (0, 97%]（非安全概率）': 'evidence-strength interval ∈ (0, 97%] (not a safety probability)',
   '视觉增强：qwen-vl-plus（可选后端）': 'vision boost: qwen-vl-plus (optional backend)',
 
   // ---------- Canvas captions ----------

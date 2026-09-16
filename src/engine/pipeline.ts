@@ -5,7 +5,7 @@ import { formatConfidence } from './presentation';
 /**
  * Builds the "dual-channel" flow visualization steps shown on the result
  * page after a photo analysis (bilingual, default zh):
- *   📷 vision → traits → rule engine → fused confidence
+ *   📷 vision → traits → rule engine → fused evidence interval
  */
 export interface PipelineStep {
   id: 'vision' | 'traits' | 'engine' | 'fusion';
@@ -51,7 +51,7 @@ export function buildVisionPipeline(
     },
     {
       id: 'fusion',
-      kicker: translate('融合置信度', lang),
+      kicker: translate('融合证据区间', lang),
       detail: `${formatConfidence(assessment.confidence).range} · ${translate(CONSISTENCY_ZH[consistency], lang)}`,
       active: true,
     },

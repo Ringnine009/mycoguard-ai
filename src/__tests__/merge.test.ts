@@ -14,17 +14,29 @@ const vision = (overrides: Partial<VisionResult>): VisionResult => ({
 });
 
 describe('mergeTraits — manual observations win over vision', () => {
+  // NOTE (modality fix): these cases used `odor` as the vision-supplied trait.
+  // Odor cannot be photographed, so the photo channel no longer contributes it
+  // (see modality.test.ts); the gap-filling contract is unchanged and is now
+  // exercised with traits a photo really can carry.
+
   it('fills gaps with vision traits', () => {
-    const merged = mergeTraits({ capShape: 'x' }, { capColor: 'r', odor: 'f' });
+    const merged = mergeTraits({ capShape: 'x' }, { capColor: 'r', gillColor: 'b' });
     expect(merged.capShape).toBe('x');
     expect(merged.capColor).toBe('r');
-    expect(merged.odor).toBe('f');
+    expect(merged.gillColor).toBe('b');
   });
 
   it('manual value overrides a conflicting vision value', () => {
-    const merged = mergeTraits({ capColor: 'w' }, { capColor: 'r', odor: 'f' });
+    const merged = mergeTraits({ capColor: 'w' }, { capColor: 'r', gillColor: 'b' });
     expect(merged.capColor).toBe('w');
-    expect(merged.odor).toBe('f');
+    expect(merged.gillColor).toBe('b');
+  });
+
+  it('never accepts a non-observable trait from the photo channel', () => {
+    const merged = mergeTraits({ capShape: 'x' }, { odor: 'f', stalkRoot: 'r', capColor: 'r' });
+    expect(merged.odor).toBeUndefined();
+    expect(merged.stalkRoot).toBeUndefined();
+    expect(merged.capColor).toBe('r');
   });
 
   it('handles missing vision gracefully', () => {
@@ -40,13 +52,23 @@ describe('evaluateVision — photo identification flows through the shared engin
     expect(r.incomplete).toBe(true);
   });
 
-  it('vision-observed dangerous signal → high risk', () => {
-    const r = evaluateVision({}, vision({ traits: { odor: 'f', capColor: 'e', capShape: 'x' } }));
+  it('a visible critical signal in the photo → high risk', () => {
+    // `sporePrintColor: r` (green spore print) is the strongest visual critical
+    // signal the dataset offers; the old case here used a vision-reported odor.
+    const r = evaluateVision({}, vision({ traits: { sporePrintColor: 'r', capColor: 'e', capShape: 'x' } }));
     expect(r.riskLevel).toBe('high');
+    expect(r.ruleHits.some((h) => h.id === 'spore-green')).toBe(true);
+  });
+
+  it('a vision-reported odor cannot steer the verdict (unobservable claim)', () => {
+    const r = evaluateVision({}, vision({ traits: { odor: 'f', capColor: 'e', capShape: 'x' } }));
+    expect(r.riskLevel).toBe('unknown');
+    expect(r.ruleHits.some((h) => h.id === 'odor-foul')).toBe(false);
   });
 
   it('manual traits complement sparse vision evidence', () => {
-    // Manual adds odor; vision contributes capColor — together ≥3 discriminative traits.
+    // Manual adds odor (a modality only the observer has); vision contributes
+    // capColor — together ≥3 discriminative traits.
     const r = evaluateVision({ odor: 'a' }, vision({ traits: { capColor: 'n', capShape: 'x' } }));
     expect(r.incomplete).toBe(false);
     expect(r.riskLevel).toBe('low');
@@ -77,26 +99,39 @@ describe('fuseVisionConfidence — dual-channel confidence fusion', () => {
     expect(r.confidence).toEqual(computeRiskAssessment({ odor: 'a', capShape: 'x', capColor: 'n' }).confidence);
   });
 
-  it('agreeing confident vision narrows the interval and raises the point', () => {
-    const base = computeRiskAssessment({ odor: 'f', capShape: 'x', capColor: 'n' });
-    const r = evaluateVision({ odor: 'f', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.85 }));
+  it('agreeing confident vision narrows the interval but never moves the point', () => {
+    const traits = { odor: 'f', capShape: 'x', capColor: 'n' };
+    const base = computeRiskAssessment(traits);
+    // Semantic change (v3): the vision model's SPECIES confidence used to be
+    // weighted into the risk number (`0.65·engine + 0.35·model`), a category
+    // error that made a verdict look more certain the more confident the model
+    // was. Fusion now only scales the interval width.
+    const r = evaluateVision(traits, vision({ modelConfidence: base.confidence.point }));
     expect(r.visionConsistency).toBe('agree');
-    expect(r.confidence.point).toBeGreaterThan(base.confidence.point);
+    expect(r.confidence.point).toBe(base.confidence.point);
+    expect(r.evidence.strength).toBe(base.evidence.strength);
     expect(r.confidence.upper - r.confidence.lower).toBeLessThan(base.confidence.upper - base.confidence.lower);
+    expect(r.evidence.intervalWidened).toBe(false);
     expect(r.confidence.upper).toBeLessThanOrEqual(0.97);
   });
 
-  it('disagreeing confident vision widens the interval', () => {
-    const base = computeRiskAssessment({ odor: 'a', capShape: 'x', capColor: 'n' });
-    const r = evaluateVision({ odor: 'a', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.95 }));
+  it('disagreeing confident vision widens the interval and flags it', () => {
+    const traits = { odor: 'a', capShape: 'x', capColor: 'n' };
+    const base = computeRiskAssessment(traits);
+    const r = evaluateVision(traits, vision({ modelConfidence: 0.95 }));
     expect(r.visionConsistency).toBe('disagree');
+    expect(r.confidence.point).toBe(base.confidence.point);
     expect(r.confidence.upper - r.confidence.lower).toBeGreaterThan(base.confidence.upper - base.confidence.lower);
+    expect(r.evidence.intervalWidened).toBe(true);
   });
 
   it('partial agreement maps to partial consistency', () => {
-    // base point for {odor a, capShape x, capColor n} ≈ 0.537; mc 0.35 → Δ≈0.19 (partial band)
-    const r = evaluateVision({ odor: 'a', capShape: 'x', capColor: 'n' }, vision({ modelConfidence: 0.35 }));
+    const traits = { odor: 'a', capShape: 'x', capColor: 'n' };
+    const base = computeRiskAssessment(traits);
+    // Sit inside the 0.12–0.30 gap band, derived from the engine's own number.
+    const r = evaluateVision(traits, vision({ modelConfidence: base.confidence.point + 0.2 }));
     expect(r.visionConsistency).toBe('partial');
+    expect(r.confidence.point).toBe(base.confidence.point);
   });
 
   it('confident model cannot rescue an unknown (insufficient) verdict → partial', () => {

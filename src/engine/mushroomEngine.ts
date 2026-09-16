@@ -1,4 +1,8 @@
-import { MushroomTraits, RiskAssessment, RuleHit } from '../types';
+// `.ts` extension required: scripts/eval_engine_safety.ts runs under Node's
+// native type stripping, which (unlike Vite/vitest) resolves neither
+// extensionless specifiers nor type-only names in a value import. tsconfig has
+// allowImportingTsExtensions on, and `import type` is fully erased.
+import type { MushroomTraits, RiskAssessment, RuleHit } from '../types.ts';
 
 /**
  * MycoGuard offline rule engine.
@@ -6,9 +10,22 @@ import { MushroomTraits, RiskAssessment, RuleHit } from '../types';
  * Design contract (see README "Uncertainty quantification"):
  *  - Risk language is four-tier: low / medium / high / unknown.
  *    The engine NEVER says "edible" or "poisonous".
- *  - Confidence is always an interval within (0, 0.97] — never 100%.
+ *  - DIRECTION and STRENGTH are separate: the four-tier risk level carries
+ *    the direction; `evidence.strength` carries only how much observational
+ *    coverage backs it. The strength number is bounded within (0, 0.97] and
+ *    is never a probability of safety.
  *  - Insufficient input (< MIN_TRAITS traits, or no discriminative trait)
  *    forces "unknown", even when a dangerous signal was observed.
+ *
+ * Why the strength metric had to be rewritten (v3): the previous point
+ * estimate used `Math.abs(diff)` of the risk/safety score difference, so a
+ * LARGE NEGATIVE difference — i.e. strong evidence for the safe class —
+ * produced just as high a number as a large positive one (measured: a
+ * 4-trait low-risk verdict rendered 74%, a 7-trait one 92%). Rendered next to
+ * a green success badge, that reads as "74% safe to eat". The metric below is
+ * built from trait coverage and signal conflict ONLY: it is invariant to the
+ * direction of the score difference, so a low-risk verdict can never look
+ * better-evidenced than a high-risk verdict.
  *
  * Weights v2 are grounded in the REAL UCI Mushrooms dataset (8,124 samples):
  *  - 100%-purity decision branches (single class in the full dataset) set the
@@ -23,7 +40,14 @@ import { MushroomTraits, RiskAssessment, RuleHit } from '../types';
  */
 
 export const MIN_TRAITS = 3;
+/**
+ * Hard ceiling for the evidence-strength number. The engine must never render
+ * a number that could be read as certainty, so the cap is deliberately below
+ * 1.0 for every tier, including the strongest critical signal.
+ */
 export const MAX_CONFIDENCE = 0.97;
+/** Total trait slots in MushroomTraits — the denominator of coverage. */
+export const TOTAL_TRAITS = 22;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -375,16 +399,69 @@ const GUIDANCE: Record<string, string> = {
   unknown: '无法判断：信息不足。请不要食用该蘑菇，先补充观察数据，或改用拍照识别寻求第二意见。',
 };
 
+/**
+ * EVIDENCE STRENGTH — how well-observed the specimen is, nothing else.
+ *
+ * Inputs are coverage, rule support and conflict only:
+ *   coverage = traits reported / TOTAL_TRAITS   (0..1)
+ *   rules    = distinct engine rules that fired (normalised over 3..6 hits —
+ *              three rules is the minimum for a directional verdict)
+ *   tension  = min(pScore, eScore) / max(pScore, eScore)  (0 = all signals
+ *              point one way, →1 = the two sides cancel out)
+ *
+ * `Math.abs(pScore − eScore)` — the old, unsafe ingredient — is deliberately
+ * absent: neither the sign nor the size of the risk/safety score difference
+ * may move this number, otherwise strong evidence FOR the safe class would
+ * inflate it and a "low risk" verdict would render a higher score than a
+ * "high risk" one (the pre-fix bug: 74% for low, 92% for the strongest case).
+ *
+ * `critical` adds a small fixed bonus (0.15) because a decisive risk signal is
+ * stronger evidence than a vague one. It is the SAME bonus for every tier that
+ * fires one, so it cannot make `low` outscore `high`, and a broader
+ * observation set can still out-score a narrow critical hit.
+ */
+export function evidenceStrength(args: {
+  active: number;
+  pScore: number;
+  eScore: number;
+  ruleHits: number;
+  critical: boolean;
+  discriminative: number;
+}): number {
+  const { active, pScore, eScore, ruleHits, critical, discriminative } = args;
+  const coverage = clamp(active / TOTAL_TRAITS, 0, 1);
+  const ruleFactor = clamp((ruleHits - 3) / 3, 0, 1);
+  const hi = Math.max(pScore, eScore);
+  const tension = hi > 0 ? clamp(Math.min(pScore, eScore) / hi, 0, 1) : 0;
+
+  const raw =
+    0.5 * Math.pow(coverage, 1.2) +
+    0.25 * ruleFactor +
+    0.1 * tension +
+    (critical ? 0.15 : 0) +
+    (discriminative > 0 ? 0.02 : 0);
+  return clamp(raw, 0.02, MAX_CONFIDENCE);
+}
+
 export function computeRiskAssessment(traits: MushroomTraits): RiskAssessment {
   const active = countActiveTraits(traits);
   const { pScore, eScore, discriminative, ruleHits } = scoreTraits(traits);
   const critical = ruleHits.some((h) => h.severity === 'critical');
 
-  // Forced "unknown": not enough evidence for ANY directional verdict.
+  // Forced "unknown": not enough evidence for ANY directional verdict, so the
+  // evidence strength must be the weakest number the app can show — lower than
+  // any directional verdict, however sparse, and explicitly not "certain".
   if (active < MIN_TRAITS || discriminative === 0) {
+    const point = 0.04;
     return {
       riskLevel: 'unknown',
-      confidence: { point: 0.18, lower: 0.05, upper: 0.3 },
+      confidence: { point, lower: 0.02, upper: 0.18 },
+      evidence: {
+        strength: point,
+        traitsObserved: active,
+        ruleHits: ruleHits.length,
+        intervalWidened: false,
+      },
       reasoning: REASONING.unknown,
       guidance: GUIDANCE.unknown,
       ruleHits,
@@ -392,22 +469,42 @@ export function computeRiskAssessment(traits: MushroomTraits): RiskAssessment {
     };
   }
 
-  const diff = pScore - eScore;
   const riskLevel = levelOf(pScore, eScore, critical);
 
-  // Point estimate: base + data richness + logic certainty; critical signals
-  // raise the floor but never reach certainty.
-  const base = 0.4 + 0.3 * (active / 22) + 0.22 * Math.min(1, Math.abs(diff) / 8);
-  const point = clamp(critical ? Math.max(base, 0.8) : base, 0.05, MAX_CONFIDENCE);
+  // Strength of the evidence — NOT a directional confidence, NOT a safety
+  // probability. See evidenceStrength() for why |Δscore| is not an input.
+  const strength = evidenceStrength({
+    active,
+    pScore,
+    eScore,
+    ruleHits: ruleHits.length,
+    critical,
+    discriminative,
+  });
+  const point = strength;
 
-  // Interval width shrinks as evidence accumulates; critical signals narrow it further.
-  const margin = (0.16 - 0.1 * (active / 22)) * (critical ? 0.6 : 1);
-  const lower = clamp(point - margin, 0.02, point);
-  const upper = clamp(point + margin, point, MAX_CONFIDENCE);
+  // Interval half-width, as a FRACTION of the evidence strength:
+  //   relativeHalfWidth = clamp(0.9 − coverage, 0.15, 0.9) × (critical ? 0.6 : 1)
+  // A sparse observation set (< ~3 of 22 traits) cannot support a tight
+  // interval, so the relative width starts near its most pessimistic value and
+  // tightens as coverage grows. Deriving the margin from a bounded RELATIVE
+  // half-width keeps the interval honest AND monotone: more evidence ⇒ higher
+  // point ⇒ strictly narrower interval, and the width can never collapse to
+  // zero or be defeated by the 0.02 floor.
+  const relHalf = clamp(0.9 - active / TOTAL_TRAITS, 0.15, 0.9) * (critical ? 0.6 : 1);
+  const margin = point * relHalf;
+  const lower = Math.max(point - margin, 0.02);
+  const upper = Math.min(point + margin, MAX_CONFIDENCE);
 
   return {
     riskLevel,
     confidence: { point, lower, upper },
+    evidence: {
+      strength,
+      traitsObserved: active,
+      ruleHits: ruleHits.length,
+      intervalWidened: false,
+    },
     reasoning: REASONING[riskLevel],
     guidance: GUIDANCE[riskLevel],
     ruleHits,

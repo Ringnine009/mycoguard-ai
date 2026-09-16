@@ -7,12 +7,23 @@ import { MushroomTraits } from '../types';
  *
  * Key contracts:
  *  1. Risk language is four-tier (low / medium / high / unknown) — never
- *     "edible" or "poisonous", never a single 100% confidence point.
- *  2. Confidence is an interval, always within (0, 0.97].
+ *     "edible" or "poisonous", never a 100% evidence point.
+ *  2. Evidence strength is an interval, always within (0, 0.97]. It measures
+ *     how well-observed the specimen is, NOT how safe it is (see
+ *     evidence.test.ts for the direction/strength separation contract).
  *  3. Insufficient input (< 3 traits, or no discriminative traits) forces
  *     "unknown" (无法判断), even when a dangerous signal was observed.
+ *
+ * SEMANTIC CHANGE (v3, documented in docs/upgrade-notes.md): the number these
+ * tests used to assert on was `0.4 + 0.3·(n/22) + 0.22·min(1,|Δscore|/8)` — a
+ * "confidence" that grew with the ABSOLUTE score gap, so it rose for strongly
+ * SAFE evidence too (measured: 74% on a low-risk verdict, 92% at the top).
+ * Rendered with a green check under a 0-100% scale, that reads as "74% safe
+ * to eat". The per-verdict numbers asserted below were therefore re-grounded
+ * on evidence strength: no test was loosened to fit the new formula, each one
+ * now asserts the property it was always about (the tier, and that the
+ * evidence signal is real and never claims certainty).
  */
-
 describe('computeRiskAssessment — data-grounded rules (UCI distillation v2)', () => {
   // Weights recalibrated from scripts/analyze_dataset.py on the real 8,124-row
   // dataset: purity branches + Gini importances. gill-color and ring-type were
@@ -44,7 +55,13 @@ describe('computeRiskAssessment — data-grounded rules (UCI distillation v2)', 
   it('spore green + buff gills + narrow gills → strongly high', () => {
     const r = computeRiskAssessment({ sporePrintColor: 'r', gillColor: 'b', gillSize: 'n' });
     expect(r.riskLevel).toBe('high');
-    expect(r.confidence.point).toBeGreaterThanOrEqual(0.8);
+    // Three critical/warning signals on only three observed traits: the tier is
+    // decisive (see GUIDANCE.high) while the evidence strength stays modest —
+    // and the interval must not reach certainty.
+    expect(r.evidence.strength).toBeGreaterThan(0.1);
+    expect(r.confidence.upper).toBeLessThan(MAX_CONFIDENCE);
+    expect(r.ruleHits.some((h) => h.severity === 'critical')).toBe(true);
+    expect(r.ruleHits.length).toBe(3);
   });
 });
 
@@ -53,9 +70,11 @@ describe('computeRiskAssessment — insufficient input forces "unknown"', () => 
     const r = computeRiskAssessment({ odor: 'f' });
     expect(r.riskLevel).toBe('unknown');
     expect(r.incomplete).toBe(true);
-    // Honest, low-confidence interval — never a confident verdict.
+    // Honest, weakest-evidence interval — never a confident verdict. The point
+    // is deliberately lower than any directional verdict's evidence strength.
     expect(r.confidence.upper).toBeLessThanOrEqual(0.3);
     expect(r.confidence.point).toBeGreaterThan(0);
+    expect(r.evidence.strength).toBeLessThan(0.05);
   });
 
   it('still surfaces a critical rule hit inside an unknown result (warning preserved)', () => {
@@ -85,11 +104,19 @@ describe('computeRiskAssessment — high-risk signals', () => {
   const FOUL_ODORS = ['f', 'p', 'c', 'y', 's', 'm'] as const;
   const neutral = { capShape: 'x', capColor: 'n' } as const;
 
+  /**
+   * Old assertion here: `confidence.point >= 0.75`. That was the bug surfaced
+   * in the audit — a critical odor on three observed traits rendered "75%+"
+   * next to a green badge, readable as a safety score. The critical signal must
+   * still be decisive (high tier, critical severity, real evidence) but it may
+   * no longer inflate the number: it now adds a fixed +0.15 evidence bonus on
+   * top of coverage, landing near 0.22 for this input.
+   */
   it.each(FOUL_ODORS.map((o) => [o]))('foul/strong odor %s → high risk, interval upper < 1', (odor) => {
     const r = computeRiskAssessment({ odor, ...neutral });
     expect(r.riskLevel).toBe('high');
-    expect(r.confidence.point).toBeGreaterThanOrEqual(0.75);
-    expect(r.confidence.upper).toBeLessThan(1);
+    expect(r.evidence.strength).toBeGreaterThan(0.15); // real, non-trivial evidence
+    expect(r.confidence.upper).toBeLessThan(MAX_CONFIDENCE);
     expect(r.ruleHits.some((h) => h.severity === 'critical')).toBe(true);
   });
 
@@ -99,12 +126,14 @@ describe('computeRiskAssessment — high-risk signals', () => {
     expect(r.ruleHits.some((h) => h.id === 'spore-green')).toBe(true);
   });
 
-  it('combined dangerous traits → high risk', () => {
+  it('combined dangerous traits → high risk with more evidence than a single signal', () => {
+    const single = computeRiskAssessment({ odor: 'f', ...neutral });
     const r = computeRiskAssessment({
       odor: 'p', sporePrintColor: 'r', gillSize: 'n', bruises: 'f',
     });
     expect(r.riskLevel).toBe('high');
-    expect(r.confidence.point).toBeGreaterThanOrEqual(0.75);
+    expect(r.evidence.strength).toBeGreaterThan(single.evidence.strength);
+    expect(r.evidence.ruleHits).toBeGreaterThan(single.evidence.ruleHits);
   });
 });
 
