@@ -74,7 +74,7 @@ const AppInner: React.FC = () => {
     setPhotoStage('analyzing');
     setPhotoError(null);
     try {
-      const v = await analyzePhoto(photo.blob, photo.fileName);
+      const v = await analyzePhoto(photo.blob, photo.fileName, lang);
       setVision(v);
       // Vision fills observation gaps; manual observations win on conflict.
       setTraits((prev) => mergeTraits(prev, v.traits));

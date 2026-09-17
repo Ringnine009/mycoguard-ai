@@ -436,17 +436,32 @@ is new, and no number on the page differs from this record.
 2. Stated honestly: a single-trait "odor" lookup table scores higher on raw accuracy (98.52%) than the full engine — but it mis-grades 3.06% of poisonous samples as low risk, which is why the headline metric here is false-safe count, not accuracy.
 3. The displayed number is an evidence-strength score (how much was actually observed), not a probability of safety: no verdict can out-display a higher-risk tier, and low-risk results no longer use success styling. The number was rebuilt after an audit showed the original |Δ| formula displayed higher values for safer verdicts.
 
-## Scope of the photo demo in the portfolio recording
+## The photo demo runs the real model
 
-The recording runs the real app with a mocked model transport injected through the
-app's own dependency-injection seam (`create_app(vision_llm=...)`, the same seam its
-tests use). Everything after the model call is the real code path: the real prompt,
-`_extract_json`, the `_sanitize` whitelist, the `NON_VISUAL_TRAITS` guard, the warning
-plumbing, and the frontend normalise/merge/engine chain.
+The portfolio recording drives the live stack: the UI dev server, then
+`POST /api/analyze` against `qwen-vl-plus` with a real field photograph
+(`samples/amanita-test.jpg`). The species guess and the visible-feature notes shown in
+the recording were written by the model on that call — nothing is scripted.
 
-**The model's answer is a fixture, not a measured output** — there is no
-`DASHSCOPE_API_KEY` on the recording machine. The rules engine and every number quoted
-on the site come from the fully offline engine and need no API.
+An earlier take was recorded through `scripts/demo_stub_backend.py`, which injects an
+`httpx.MockTransport` with canned notes, on the stated premise that the machine had no
+`DASHSCOPE_API_KEY`. That premise was wrong and had not been re-checked: the key is in
+`projects/.env`, this app's own config loader finds it (`default_env_files()` →
+`<repo>/.env`, then `<parent>/.env`), and `/api/health` reports `"vision": true`. The
+stub is still useful for **offline development of the UI** — it is not used for any
+published recording.
 
-The harness lives in `scripts/demo_stub_backend.py` with this explanation in its
-docstring; the manifest entry that consumes it says the same thing.
+### A language defect the real recording exposed
+
+The vision prompt asked for Chinese notes unconditionally, so an English visitor read a
+Chinese description under an English interface, and the dropped-trait warning was
+Chinese too. The requested language now travels from the UI (`analyzePhoto(..., lang)`)
+through `POST /api/analyze` into the prompt, so the model answers in the language the
+visitor is reading. The trait *codes* stay verbatim in one language on purpose — they
+are dataset vocabulary and translating them would produce values the engine cannot map.
+
+Because the prompt now asks the model not to invent non-visual traits, the
+"dropped trait" warning is **conditional**: it appears only when a model actually
+reports something a photo cannot show. The recording asserts its shape if it appears
+and does not require it, because requiring it would mean preferring a hallucinating
+model. The guard itself is pinned by tests either way.

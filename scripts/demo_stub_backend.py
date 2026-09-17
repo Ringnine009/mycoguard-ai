@@ -1,20 +1,24 @@
-"""MycoGuard DEMO VISION BACKEND (record-time only -- not part of the app).
+"""MycoGuard OFFLINE DEV BACKEND (not used by any published recording).
 
-Why this exists: the published MycoGuard recording never ran the photo analysis
-at all (the recorder clicked the "Photo ID" *tab* but never the analyse button),
-so "vision-derived traits merged into the verdict" was never demonstrated. The
-app's own vision path needs DASHSCOPE_API_KEY, which is not configured here.
+Purpose: develop and screenshot the UI without spending a model call. It builds the
+REAL app (`create_app`) with an `httpx.MockTransport` injected through the app's own
+dependency-injection seam (`create_app(vision_llm=...)`, the same seam the tests use),
+so everything downstream of the model call is the real code path — the real prompt,
+`_extract_json`, the `_sanitize` whitelist, the `NON_VISUAL_TRAITS` guard, the warning
+plumbing, and the frontend normalise/merge/engine chain. Only the model's answer is
+canned.
 
-This launcher builds the REAL app (`create_app`) with an `httpx.MockTransport`
-injected through the app's own dependency-injection seam
-(`create_app(vision_llm=...)`, the same seam its tests use). Everything
-downstream of the model call is the real code path: the real PROMPT, the real
-`_extract_json`, the real `_sanitize` whitelist, the real NON_VISUAL_TRAITS
-guard, the real warning plumbing, and the real frontend normalise/merge/engine.
+HISTORY, because it matters for how this file should be used: an earlier portfolio
+recording was made against this stub on the premise that the machine had no
+`DASHSCOPE_API_KEY`. That premise was never re-checked and was false — the key is in
+`projects/.env`, this app's own loader finds it, and `/api/health` reports
+`"vision": true`. The published recording now drives the live `qwen-vl-plus` endpoint
+(see `record-myco-v7.js`), and no published asset shows a stubbed answer.
 
-The canned model answer stands in for qwen-vl-plus, so the UI state shown is a
-REAL render of the app driven by a STUBBED model output. It is a demo fixture,
-not a measured model result -- stated as such in the manifest and the report.
+Consequences worth knowing if you extend the canned payload: it is what made the
+"dropped non-visual trait" warning look like a guaranteed step in the flow (the fixture
+always injects `odor`). The real model does not volunteer non-visual traits, so that
+warning is conditional — do not build an assertion that requires it.
 
 Usage (from the repo root):
     .venv/Scripts/python.exe scripts/demo_stub_backend.py --port 8000 --latency 2.5

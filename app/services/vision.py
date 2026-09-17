@@ -60,11 +60,49 @@ TRAIT_VOCAB: dict[str, set[str]] = {
 }
 assert NON_VISUAL_TRAITS.isdisjoint(TRAIT_VOCAB), "non-visual traits must not be reportable"
 
-PROMPT = (
+def _prompt_for(lang: str = "zh") -> str:
+    """Build the vision prompt in the language the user is reading the UI in.
+
+    The trait *codes* below are dataset vocabulary and must stay verbatim in every
+    language — translating them would produce values the engine cannot map. Only the
+    prose around them changes. Without this, an English visitor receives a Chinese
+    `notes` field and Chinese warnings on an English page, because the original
+    prompt hardcoded the language.
+    """
+    if str(lang).lower().startswith("en"):
+        return (
+            "You are a field mycologist. Analyse this mushroom photo and output ONE JSON "
+            "object (no extra text, no Markdown fence) in this shape:\n"
+            '{"species_guess": "species name or null", "confidence": a number from 0 to 1, '
+            '"traits": {...}, "notes": "1-2 sentences of the visible features"}\n'
+            "Write every human-readable value (species_guess and notes) in English. "
+            "traits may only contain what you can see clearly in the photo, and keys and "
+            "values must come from this code table:\n"
+            "capShape: b|c|x|f|k|s; capSurface: f|g|y|s; "
+            "capColor: n|b|c|g|r|p|u|e|w|y; bruises: t|f; gillSize: b|n; "
+            "gillSpacing: c|w|d; gillColor: k|n|b|h|g|r|o|p|u|e|w|y; "
+            "gillAttachment: a|d|f|n; stalkShape: e|t; "
+            "stalkSurfaceAbove: f|y|k|s; stalkSurfaceBelow: f|y|k|s; "
+            "stalkColorAbove: n|b|c|o|p|e|w|y; stalkColorBelow: n|b|c|o|p|e|w|y; "
+            "veilType: p|u; veilColor: n|o|w|y; ringNumber: n|o|t; ringType: c|e|f|l|n|p|s|z; "
+            "sporePrintColor (only if visible in the photo): k|n|b|h|r|o|u|w|y; "
+            "population: a|c|n|s|v|y; habitat: g|l|m|p|u|w|d.\n"
+            "Rules: record only traits actually visible in the photo, never guess what you "
+            "cannot see; odour (odor) cannot be judged from a photo and must never be "
+            "reported; the stem base (stalkRoot) is underground and cannot appear in a "
+            "photo, so never report it; report nothing that would require smelling, "
+            "touching, tasting or digging. If you cannot identify the species, set "
+            "species_guess to null and confidence to 0."
+        )
+    return PROMPT_ZH
+
+
+PROMPT_ZH = (
     "你是一名真菌学野外助手。请分析这张蘑菇照片，并只输出一个 JSON 对象"
     "（不要任何额外文字或 Markdown 代码块），格式如下：\n"
     '{"species_guess": "物种名称或 null", "confidence": 0到1的小数, '
     '"traits": {...}, "notes": "1-2句可见特征描述"}\n'
+    "所有给人看的字段（species_guess 与 notes）请用中文书写。"
     "traits 只能包含你能在照片中明确看到的性状，键值必须来自以下代码表：\n"
     "capShape: b|c|x|f|k|s；capSurface: f|g|y|s；"
     "capColor: n|b|c|g|r|p|u|e|w|y；bruises: t|f；gillSize: b|n；"
@@ -80,6 +118,9 @@ PROMPT = (
     "照片无法显示，也绝不能报告；任何需要闻、摸、尝或挖掘才能确定的性状都不要报告。"
     "若无法识别物种，species_guess 设为 null 且 confidence 设为 0。"
 )
+
+# Kept as the default so existing imports and call sites keep working unchanged.
+PROMPT = PROMPT_ZH
 
 
 class VisionError(Exception):
@@ -161,10 +202,10 @@ def _sanitize(data: dict) -> dict:
     }
 
 
-def analyze_image(llm, image_bytes: bytes, mime: str) -> dict:
+def analyze_image(llm, image_bytes: bytes, mime: str, lang: str = "zh") -> dict:
     out_mime, b64 = prepare_image(image_bytes, mime)
     content = [
-        {"type": "text", "text": PROMPT},
+        {"type": "text", "text": _prompt_for(lang)},
         {"type": "image_url", "image_url": {"url": f"data:{out_mime};base64,{b64}"}},
     ]
     raw = llm.chat_completion(
@@ -174,11 +215,20 @@ def analyze_image(llm, image_bytes: bytes, mime: str) -> dict:
     )
     result = _sanitize(_extract_json(raw))
     # Surface the drops instead of hiding them: a model that "smelled" the
-    # mushroom is a hallucination signal the user deserves to see.
-    warnings = [
-        f"模型报告了无法从照片观察的性状 {name}，已丢弃（不同模态，不可由图像推断）"
-        for name in result.pop("dropped_traits")
-    ]
+    # mushroom is a hallucination signal the user deserves to see. The message
+    # follows the UI language for the same reason the notes do.
+    dropped = result.pop("dropped_traits")
+    if str(lang).lower().startswith("en"):
+        warnings = [
+            f"the model reported {name}, which cannot be observed from a photo — dropped "
+            "(different modality, not inferable from an image)"
+            for name in dropped
+        ]
+    else:
+        warnings = [
+            f"模型报告了无法从照片观察的性状 {name}，已丢弃（不同模态，不可由图像推断）"
+            for name in dropped
+        ]
     result["status"] = "ok"
     result["warnings"] = warnings
     return result

@@ -49,10 +49,22 @@ export async function probeHealth(timeoutMs = 2500): Promise<BackendHealth | nul
   }
 }
 
-/** Upload a photo for vision analysis (multipart). Throws OfflineError when the vision service is not configured. */
-export async function analyzePhoto(file: Blob, fileName = 'mushroom.jpg'): Promise<VisionResult> {
+/**
+ * Upload a photo for vision analysis (multipart). Throws OfflineError when the vision
+ * service is not configured.
+ *
+ * `lang` is forwarded so the model writes species_guess/notes in the language the
+ * reader is using; without it the backend defaults to Chinese and an English visitor
+ * reads a Chinese description under an English UI.
+ */
+export async function analyzePhoto(
+  file: Blob,
+  fileName = 'mushroom.jpg',
+  lang: 'zh' | 'en' = 'zh',
+): Promise<VisionResult> {
   const form = new FormData();
   form.append('file', file, fileName);
+  form.append('lang', lang);
   const res = await fetch(`${API_BASE}/analyze`, { method: 'POST', body: form });
   if (res.status === 503) throw new OfflineError(await safeText(res));
   if (!res.ok) throw new ApiError(await safeText(res));

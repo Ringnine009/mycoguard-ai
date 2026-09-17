@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -89,7 +89,7 @@ def create_app(
         }
 
     @app.post("/api/analyze")
-    async def analyze(file: UploadFile = File(...)) -> dict:
+    async def analyze(file: UploadFile = File(...), lang: str = Form("zh")) -> dict:
         llm = app.state.vision_llm
         if llm is None:
             return JSONResponse(
@@ -119,7 +119,10 @@ def create_app(
         data = bytes(data)
 
         try:
-            return analyze_image(llm, data, mime)
+            # `lang` follows the UI so the model writes species_guess/notes (and any
+            # dropped-trait warning) in the language the reader is looking at. It
+            # defaults to zh because that was the only behaviour before.
+            return analyze_image(llm, data, mime, lang=lang)
         except VisionError as exc:
             raise HTTPException(status_code=415, detail=str(exc)) from exc
         except LLMError as exc:
